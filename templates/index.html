@@ -177,6 +177,41 @@
     .hi-stock-tag.up{border-color:rgba(240,77,77,.3);color:var(--red);}
     #history-empty{text-align:center;padding:40px;color:var(--muted);}
 
+    /* Compare button on rows */
+    .cmp-btn{background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:10px;color:var(--muted);padding:1px 5px;line-height:1.6;transition:all .15s;white-space:nowrap;}
+    .cmp-btn:hover{border-color:var(--accent);color:var(--accent);}
+    .cmp-btn.in-compare{border-color:var(--gold);color:var(--gold);background:rgba(245,166,35,.1);}
+
+    /* Floating compare bar */
+    #compare-bar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e2233;border:1px solid var(--accent);border-radius:12px;padding:10px 18px;display:none;align-items:center;gap:14px;z-index:500;box-shadow:0 4px 24px rgba(0,0,0,.5);}
+    .cmp-slots{display:flex;gap:10px;align-items:center;}
+    .cmp-slot{display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:5px 10px;min-width:120px;}
+    .cmp-slot .slot-name{font-size:12px;font-weight:600;}
+    .cmp-slot .slot-code{font-size:10px;color:var(--muted);}
+    .cmp-slot-empty{color:var(--muted);font-size:12px;font-style:italic;}
+    .cmp-slot button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;margin-left:4px;line-height:1;}
+    .cmp-slot button:hover{color:var(--red);}
+    #compare-bar .vs{font-size:13px;font-weight:700;color:var(--muted);}
+    #do-compare-btn{padding:7px 16px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;}
+    #do-compare-btn:disabled{opacity:.4;cursor:not-allowed;}
+    #close-compare-bar{background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:2px 4px;line-height:1;margin-left:4px;}
+    #close-compare-bar:hover{color:var(--text);}
+
+    /* Compare Modal */
+    #compare-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:600;display:none;align-items:center;justify-content:center;}
+    #compare-modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:min(800px,96vw);max-height:88vh;overflow:hidden;display:flex;flex-direction:column;}
+    #compare-modal .modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+    #compare-modal .modal-header h3{font-size:15px;font-weight:700;}
+    .cmp-table{width:100%;border-collapse:collapse;font-size:13px;}
+    .cmp-table th{padding:10px 14px;font-size:11px;color:var(--muted);font-weight:600;background:var(--bg);}
+    .cmp-table th.stock-col{font-size:14px;font-weight:700;color:var(--text);}
+    .cmp-table td{padding:9px 14px;border-top:1px solid var(--border);text-align:right;}
+    .cmp-table td:first-child{text-align:left;color:var(--muted);font-size:12px;}
+    .cmp-table tr:hover td{background:#1e2233;}
+    .cmp-win{color:var(--red);font-weight:700;}
+    .cmp-lose{color:var(--muted);}
+    .cmp-neutral{color:var(--text);}
+
     /* Search bar */
     .search-wrap{position:relative;display:flex;align-items:center;margin-bottom:16px;}
     #search-input{width:100%;padding:9px 40px 9px 36px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .2s;}
@@ -321,6 +356,7 @@
       <thead id="thead-normal">
         <tr>
           <th style="width:28px"></th>
+          <th style="width:36px"></th>
           <th data-col="rank" style="width:36px">#</th>
           <th data-col="name">股票</th>
           <th data-col="change_pct">涨跌幅</th>
@@ -362,6 +398,28 @@
     </div>
   </div>
 </main>
+
+<!-- Floating Compare Bar -->
+<div id="compare-bar">
+  <div class="cmp-slots">
+    <div class="cmp-slot" id="cmp-slot-0"><span class="cmp-slot-empty">选择第一只</span></div>
+    <div class="vs">VS</div>
+    <div class="cmp-slot" id="cmp-slot-1"><span class="cmp-slot-empty">选择第二只</span></div>
+  </div>
+  <button id="do-compare-btn" disabled>开始对比</button>
+  <button id="close-compare-bar">✕</button>
+</div>
+
+<!-- Compare Modal -->
+<div id="compare-overlay" style="display:none">
+  <div id="compare-modal">
+    <div class="modal-header">
+      <h3>股票对比</h3>
+      <button class="modal-close" id="compare-modal-close">✕</button>
+    </div>
+    <div class="modal-body" id="compare-body" style="overflow-y:auto;padding:16px 20px;"></div>
+  </div>
+</div>
 
 <!-- Settings Drawer -->
 <div id="settings-overlay"></div>
@@ -855,8 +913,10 @@ function renderNormalTable() {
     const vrC  = vrV>1             ? 'style="color:var(--gold)"'  : '';
     const trC  = trV>=5&&trV<=10   ? 'style="color:var(--gold)"'  : '';
     const globalIdx = (page-1)*PAGE_SIZE + i + 1;
+    const inCmp = compareList.some(c=>c.code===s.code);
     return `<tr>
       <td><button class="star-btn ${starred?'starred':''}" data-code="${s.code}" data-name="${s.name}" onclick="toggleStar('${s.code}','${s.name}')">${starred?'★':'☆'}</button></td>
+      <td><button class="cmp-btn ${inCmp?'in-compare':''}" onclick="toggleCompare(${JSON.stringify(s).replace(/"/g,'&quot;')})" title="加入对比">${inCmp?'✓比':'+ 比'}</button></td>
       <td style="color:var(--muted);font-size:11px">${globalIdx}</td>
       <td><div class="stock-name">${s.name}${mkt}</div><div class="stock-code">${s.code}</div></td>
       <td><span class="${pctCls}">${isLimitUp(s.change_pct)?'涨停 ':''}${fmt(s.change_pct)}%</span></td>
@@ -1045,6 +1105,108 @@ document.getElementById('notif-btn').addEventListener('click', ()=>{
   document.getElementById('notif-dot').style.display = 'none';
   openSettings();
   setTimeout(()=>document.getElementById('s-browser-notif').scrollIntoView({behavior:'smooth'}), 300);
+});
+
+/* ═══════════════════════════════════════════════════════
+   Compare
+═══════════════════════════════════════════════════════ */
+let compareList = [];
+
+function toggleCompare(stock) {
+  const idx = compareList.findIndex(c => c.code === stock.code);
+  if (idx !== -1) {
+    compareList.splice(idx, 1);
+  } else {
+    if (compareList.length >= 2) { showToast('最多对比两只股票，请先移除一只'); return; }
+    compareList.push(stock);
+  }
+  updateCompareBar();
+  renderNormalTable();
+}
+
+function updateCompareBar() {
+  const bar = document.getElementById('compare-bar');
+  if (!compareList.length) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+
+  [0, 1].forEach(i => {
+    const slot = document.getElementById(`cmp-slot-${i}`);
+    const s = compareList[i];
+    slot.innerHTML = s
+      ? `<div><div class="slot-name">${s.name}</div><div class="slot-code">${s.code}</div></div>
+         <button onclick="removeCompare('${s.code}')">✕</button>`
+      : `<span class="cmp-slot-empty">${i===0?'选择第一只':'选择第二只'}</span>`;
+  });
+  document.getElementById('do-compare-btn').disabled = compareList.length < 2;
+}
+
+function removeCompare(code) {
+  compareList = compareList.filter(c => c.code !== code);
+  updateCompareBar();
+  renderNormalTable();
+}
+
+function openCompareModal() {
+  if (compareList.length < 2) return;
+  const [a, b] = compareList;
+  const rows = [
+    { label:'现价',       va: parseFloat(a.price),         vb: parseFloat(b.price),         fmt: v=>v.toFixed(2),              higher:'none' },
+    { label:'涨跌幅',     va: parseFloat(a.change_pct),    vb: parseFloat(b.change_pct),    fmt: v=>(v>0?'+':'')+v.toFixed(2)+'%', higher:'a>b' },
+    { label:'涨跌额',     va: parseFloat(a.change),        vb: parseFloat(b.change),        fmt: v=>(v>0?'+':'')+v.toFixed(2),  higher:'a>b' },
+    { label:'今开',       va: parseFloat(a.open),          vb: parseFloat(b.open),          fmt: v=>v.toFixed(2),              higher:'none' },
+    { label:'最高',       va: parseFloat(a.high),          vb: parseFloat(b.high),          fmt: v=>v.toFixed(2),              higher:'none' },
+    { label:'最低',       va: parseFloat(a.low),           vb: parseFloat(b.low),           fmt: v=>v.toFixed(2),              higher:'none' },
+    { label:'昨收',       va: parseFloat(a.prev_close),    vb: parseFloat(b.prev_close),    fmt: v=>v.toFixed(2),              higher:'none' },
+    { label:'振幅',       va: a.prev_close>0?(a.high-a.low)/a.prev_close*100:0, vb: b.prev_close>0?(b.high-b.low)/b.prev_close*100:0, fmt: v=>v.toFixed(2)+'%', higher:'none' },
+    { label:'量比',       va: parseFloat(a.volume_ratio),  vb: parseFloat(b.volume_ratio),  fmt: v=>v.toFixed(2),              higher:'a>b' },
+    { label:'换手率',     va: parseFloat(a.turnover_rate), vb: parseFloat(b.turnover_rate), fmt: v=>v.toFixed(2)+'%',          higher:'a>b' },
+    { label:'市值(亿)',   va: parseFloat(a.market_cap)/1e8,vb: parseFloat(b.market_cap)/1e8,fmt: v=>v.toFixed(2),              higher:'a<b' },
+    { label:'市盈率',     va: parseFloat(a.pe),            vb: parseFloat(b.pe),            fmt: v=>v.toFixed(2),              higher:'a<b' },
+    { label:'成交额',     va: parseFloat(a.turnover),      vb: parseFloat(b.turnover),      fmt: v=>fmtMoney(v),               higher:'a>b' },
+  ];
+
+  const mktBadge = s => s.market==='SH'
+    ? '<span class="badge badge-sh">沪</span>'
+    : '<span class="badge badge-sz">深</span>';
+
+  const tableRows = rows.map(r => {
+    let clsA = 'cmp-neutral', clsB = 'cmp-neutral';
+    if (!isNaN(r.va) && !isNaN(r.vb) && r.higher !== 'none') {
+      if (r.higher === 'a>b') { if(r.va > r.vb) clsA='cmp-win'; else if(r.vb > r.va) clsB='cmp-win'; }
+      if (r.higher === 'a<b') { if(r.va < r.vb && r.va > 0) clsA='cmp-win'; else if(r.vb < r.va && r.vb > 0) clsB='cmp-win'; }
+    }
+    return `<tr>
+      <td>${r.label}</td>
+      <td class="${clsA}">${isNaN(r.va)?'--':r.fmt(r.va)}</td>
+      <td class="${clsB}">${isNaN(r.vb)?'--':r.fmt(r.vb)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('compare-body').innerHTML = `
+    <table class="cmp-table">
+      <thead><tr>
+        <th style="width:90px"></th>
+        <th class="stock-col">${a.name}${mktBadge(a)}<br><span style="font-size:11px;font-weight:400;color:var(--muted)">${a.code}</span></th>
+        <th class="stock-col">${b.name}${mktBadge(b)}<br><span style="font-size:11px;font-weight:400;color:var(--muted)">${b.code}</span></th>
+      </tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+    <div style="margin-top:10px;font-size:11px;color:var(--muted);text-align:right"><span style="color:var(--red);font-weight:700">红色</span> = 该项数据更优</div>`;
+
+  document.getElementById('compare-overlay').style.display = 'flex';
+}
+
+document.getElementById('do-compare-btn').addEventListener('click', openCompareModal);
+document.getElementById('compare-modal-close').addEventListener('click', () => {
+  document.getElementById('compare-overlay').style.display = 'none';
+});
+document.getElementById('compare-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) document.getElementById('compare-overlay').style.display = 'none';
+});
+document.getElementById('close-compare-bar').addEventListener('click', () => {
+  compareList = [];
+  updateCompareBar();
+  renderNormalTable();
 });
 
 /* ═══════════════════════════════════════════════════════
