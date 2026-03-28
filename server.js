@@ -2,7 +2,11 @@ const express = require('express');
 const path = require('path');
 
 const app = express();
+app.use(express.json());
 const PORT = process.env.PORT || 5000;
+
+// ── 选股历史（内存，最多保留100条）────────────────────────────────────
+const screenHistory = [];
 
 function getBeijingDate() {
   const now = new Date();
@@ -23,7 +27,6 @@ function getMarketStatus() {
   return { open: false, status: '已收盘' };
 }
 
-// secid: 上海 1.6xxxxx, 深圳 0.0/3xxxxx
 function getSecId(code) {
   return code.startsWith('6') ? `1.${code}` : `0.${code}`;
 }
@@ -47,11 +50,9 @@ async function fetchTopGainers(page = 1, pageSize = 50, board = 'all') {
     pn: page, pz: pageSize, po: 1, np: 1,
     ut: 'bd1d9ddb04089700cf9c27f6f7426281',
     fltt: 2, invt: 2, fid: 'f3', fs,
-    // f8=换手率 f10=量比 f20=总市值
     fields: 'f2,f3,f4,f5,f6,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20',
     _: Date.now(),
   });
-
   const resp = await fetch(`https://push2.eastmoney.com/api/qt/clist/get?${params}`, {
     headers: EM_HEADERS, signal: AbortSignal.timeout(10000),
   });
@@ -66,22 +67,54 @@ async function fetchTopGainers(page = 1, pageSize = 50, board = 'all') {
       change:        item.f4  ?? 0,
       volume:        item.f5  ?? 0,
       turnover:      item.f6  ?? 0,
-      turnover_rate: item.f8  ?? 0,   // 换手率 %
+      turnover_rate: item.f8  ?? 0,
       pe:            item.f9  ?? 0,
-      volume_ratio:  item.f10 ?? 0,   // 量比
+      volume_ratio:  item.f10 ?? 0,
       high:          item.f15 ?? 0,
       low:           item.f16 ?? 0,
       open:          item.f17 ?? 0,
       prev_close:    item.f18 ?? 0,
-      market_cap:    item.f20 ?? 0,   // 总市值（元）
+      market_cap:    item.f20 ?? 0,
       market:        item.f13 === 1 ? 'SH' : 'SZ',
     }));
 }
 
-// 检查近30个交易日是否有涨停
+// 批量获取自选股行情
+async function fetchQuotesBySecids(secids) {
+  if (!secids || secids.length === 0) return [];
+  const params = new URLSearchParams({
+    secids: secids.join(','),
+    fields: 'f2,f3,f4,f5,f6,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20',
+    fltt: 2, invt: 2, _: Date.now(),
+  });
+  try {
+    const resp = await fetch(`https://push2.eastmoney.com/api/qt/ulist.np/get?${params}`, {
+      headers: EM_HEADERS, signal: AbortSignal.timeout(8000),
+    });
+    const raw = await resp.json();
+    return (raw?.data?.diff ?? []).map(item => ({
+      code:          item.f12 ?? '',
+      name:          item.f14 ?? '',
+      price:         item.f2  ?? 0,
+      change_pct:    item.f3  ?? 0,
+      change:        item.f4  ?? 0,
+      volume:        item.f5  ?? 0,
+      turnover:      item.f6  ?? 0,
+      turnover_rate: item.f8  ?? 0,
+      pe:            item.f9  ?? 0,
+      volume_ratio:  item.f10 ?? 0,
+      high:          item.f15 ?? 0,
+      low:           item.f16 ?? 0,
+      open:          item.f17 ?? 0,
+      prev_close:    item.f18 ?? 0,
+      market_cap:    item.f20 ?? 0,
+      market:        item.f13 === 1 ? 'SH' : 'SZ',
+    }));
+  } catch { return []; }
+}
+
 async function checkLimitUpHistory(code) {
   const secid = getSecId(code);
-  // 创业板/科创板 20% 限制
   const threshold = (code.startsWith('3') || code.startsWith('688')) ? 19.5 : 9.9;
   try {
     const resp = await fetch(
@@ -95,7 +128,6 @@ async function checkLimitUpHistory(code) {
   } catch { return false; }
 }
 
-// 获取当天分时数据
 async function fetchIntradayTrends(code) {
   const secid = getSecId(code);
   try {
@@ -110,42 +142,22 @@ async function fetchIntradayTrends(code) {
   } catch { return []; }
 }
 
-// 分析分时图条件7：
-//   1. 全天价格在黄色均价线上
-//   2. 14:30后破新高
-//   3. 破新高后回落不落均线
 function analyzeIntraday(trends) {
   if (!trends || trends.length < 5) return { pass: false, reason: '分时数据不足' };
-
   const points = trends
-    .map(t => {
-      const p = t.split(',');
-      return { time: p[0], price: parseFloat(p[2]), avg: parseFloat(p[7]) };
-    })
+    .map(t => { const p = t.split(','); return { time: p[0], price: parseFloat(p[2]), avg: parseFloat(p[7]) }; })
     .filter(p => !isNaN(p.price) && !isNaN(p.avg) && p.avg > 0);
-
   if (points.length < 5) return { pass: false, reason: '有效数据点不足' };
-
-  // 条件1：全天在均线上
   const below = points.find(p => p.price < p.avg);
   if (below) return { pass: false, reason: `${below.time} 价格跌破均线` };
-
   const before = points.filter(p => p.time < '14:30');
   const after  = points.filter(p => p.time >= '14:30');
-
-  if (after.length === 0) return { pass: false, reason: '尚未到14:30，无法判断' };
-
+  if (after.length === 0) return { pass: false, reason: '尚未到14:30' };
   const maxBefore = before.length > 0 ? Math.max(...before.map(p => p.price)) : 0;
-
-  // 条件2：14:30后破新高
   const newHighIdx = after.findIndex(p => p.price > maxBefore);
   if (newHighIdx === -1) return { pass: false, reason: '14:30后未破新高' };
-
-  // 条件3：破新高后回落不落均线
-  const afterHigh = after.slice(newHighIdx + 1);
-  const failPoint = afterHigh.find(p => p.price < p.avg);
+  const failPoint = after.slice(newHighIdx + 1).find(p => p.price < p.avg);
   if (failPoint) return { pass: false, reason: `${failPoint.time} 破新高后回落至均线下方` };
-
   return { pass: true, reason: '全部条件通过' };
 }
 
@@ -159,7 +171,14 @@ async function batchProcess(items, fn, concurrency = 5) {
   return results;
 }
 
-// ── Routes ───────────────────────────────────────────────────────────────
+function nowStr() {
+  const bj = getBeijingDate();
+  const pad = n => String(n).padStart(2, '0');
+  return `${bj.getFullYear()}-${pad(bj.getMonth()+1)}-${pad(bj.getDate())} ` +
+         `${pad(bj.getHours())}:${pad(bj.getMinutes())}:${pad(bj.getSeconds())}`;
+}
+
+// ── Routes ────────────────────────────────────────────────────────────────────
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'templates', 'index.html')));
 
@@ -169,85 +188,117 @@ app.get('/api/stocks', async (req, res) => {
   const pageSize = parseInt(req.query.size || '50');
   try {
     const data = await fetchTopGainers(page, pageSize, board);
-    const bj = getBeijingDate();
     const { open, status } = getMarketStatus();
-    const pad = n => String(n).padStart(2, '0');
-    const timeStr = `${bj.getFullYear()}-${pad(bj.getMonth()+1)}-${pad(bj.getDate())} ` +
-                    `${pad(bj.getHours())}:${pad(bj.getMinutes())}:${pad(bj.getSeconds())}`;
-    res.json({ success: true, data, market_open: open, market_status: status, time: timeStr, total: data.length });
+    res.json({ success: true, data, market_open: open, market_status: status, time: nowStr(), total: data.length });
   } catch (e) {
     res.json({ success: false, error: e.message, data: [] });
   }
 });
 
-// 2:30 选股筛选接口
+// 自选股实时行情
+app.post('/api/quotes', async (req, res) => {
+  const codes = req.body.codes || [];
+  try {
+    const secids = codes.map(c => getSecId(c));
+    const data = await fetchQuotesBySecids(secids);
+    res.json({ success: true, data });
+  } catch (e) {
+    res.json({ success: false, error: e.message, data: [] });
+  }
+});
+
+// 2:30 选股（支持自定义条件）
 app.get('/api/screen', async (req, res) => {
+  const params = {
+    min_pct: parseFloat(req.query.min_pct ?? 3),
+    max_pct: parseFloat(req.query.max_pct ?? 5),
+    max_cap: parseFloat(req.query.max_cap ?? 200) * 1e8,  // 亿→元
+    min_vr:  parseFloat(req.query.min_vr  ?? 1),
+    min_tr:  parseFloat(req.query.min_tr  ?? 5),
+    max_tr:  parseFloat(req.query.max_tr  ?? 10),
+  };
+
   try {
     const { open } = getMarketStatus();
-
-    // 取前400只涨幅股（4页×100）
     const pages = await Promise.all(
       [1, 2, 3, 4].map(p => fetchTopGainers(p, 100, 'all').catch(() => []))
     );
     const allStocks = pages.flat();
 
-    // 快速过滤（条件1-5）
-    // 1. 涨幅 3-5%
-    // 2. 市值 < 200亿
-    // 3. 量比 > 1
-    // 4. 换手率 5-10%
     const candidates = allStocks.filter(s => {
       const pct = parseFloat(s.change_pct);
       const cap = parseFloat(s.market_cap);
       const vr  = parseFloat(s.volume_ratio);
       const tr  = parseFloat(s.turnover_rate);
-      return pct >= 3 && pct <= 5 &&
-             cap > 0 && cap < 20_000_000_000 &&
-             vr > 1 &&
-             tr >= 5 && tr <= 10;
+      return pct >= params.min_pct && pct <= params.max_pct &&
+             cap > 0 && cap < params.max_cap &&
+             vr > params.min_vr &&
+             tr >= params.min_tr && tr <= params.max_tr;
     });
 
-    // 慢速检查：30日涨停 + 分时条件
     const results = await batchProcess(candidates, async (stock) => {
       const [hadLimitUp, trends] = await Promise.all([
         checkLimitUpHistory(stock.code),
         open ? fetchIntradayTrends(stock.code) : Promise.resolve([]),
       ]);
-
-      if (!hadLimitUp) {
-        return { ...stock, pass: false, fail_reason: '近30交易日无涨停记录' };
-      }
-
+      if (!hadLimitUp) return { ...stock, pass: false, had_limit_up: false, fail_reason: '近30交易日无涨停记录' };
       const intraday = (open && trends.length > 0)
         ? analyzeIntraday(trends)
         : { pass: true, reason: '非交易时间，跳过分时检测' };
-
       return {
-        ...stock,
-        pass: intraday.pass,
-        had_limit_up: true,
+        ...stock, had_limit_up: true,
         intraday_reason: intraday.reason,
+        pass: intraday.pass,
         fail_reason: intraday.pass ? null : intraday.reason,
       };
     }, 5);
 
-    const bj = getBeijingDate();
-    const pad = n => String(n).padStart(2, '0');
-    const timeStr = `${bj.getFullYear()}-${pad(bj.getMonth()+1)}-${pad(bj.getDate())} ` +
-                    `${pad(bj.getHours())}:${pad(bj.getMinutes())}:${pad(bj.getSeconds())}`;
+    const passed = results.filter(s => s.pass);
+    const time   = nowStr();
+
+    // 保存历史
+    screenHistory.unshift({
+      id:               Date.now(),
+      time,
+      params:           { ...params, max_cap: params.max_cap / 1e8 },
+      total_scanned:    allStocks.length,
+      total_candidates: candidates.length,
+      total_passed:     passed.length,
+      passed:           passed.map(s => ({ code: s.code, name: s.name, change_pct: s.change_pct, price: s.price })),
+    });
+    if (screenHistory.length > 100) screenHistory.length = 100;
 
     res.json({
-      success: true,
-      passed:         results.filter(s => s.pass),
-      all_candidates: results,
-      total_scanned:  allStocks.length,
+      success: true, passed, all_candidates: results,
+      total_scanned: allStocks.length,
       total_candidates: candidates.length,
-      total_passed:   results.filter(s => s.pass).length,
-      market_open:    open,
-      time:           timeStr,
+      total_passed: passed.length,
+      market_open: open, time,
     });
   } catch (e) {
     res.json({ success: false, error: e.message, passed: [], all_candidates: [] });
+  }
+});
+
+// 历史记录
+app.get('/api/history', (req, res) => {
+  res.json({ success: true, history: screenHistory });
+});
+
+// Webhook 推送代理（避免前端跨域）
+app.post('/api/notify', async (req, res) => {
+  const { url, payload } = req.body;
+  if (!url) return res.json({ success: false, error: '缺少 url' });
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(5000),
+    });
+    res.json({ success: resp.ok, status: resp.status });
+  } catch (e) {
+    res.json({ success: false, error: e.message });
   }
 });
 
