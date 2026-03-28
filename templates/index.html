@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>今日涨幅榜 — A股实时行情</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3e;
+      --red: #f04d4d;
+      --green: #12b86e;
+      --gold: #f5a623;
+      --text: #e2e8f0;
+      --muted: #7c8499;
+      --accent: #4e8ef7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .logo span { color: var(--red); }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    #market-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      background: #1e2233;
+      border: 1px solid var(--border);
+    }
+    #market-badge .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+    #market-badge.open .dot { background: var(--green); animation: pulse 1.5s infinite; }
+    #market-badge.open { border-color: var(--green); color: var(--green); }
+    #market-badge.closed { border-color: var(--muted); color: var(--muted); }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    #clock {
+      font-size: 13px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Main ── */
+    main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+    /* ── Controls ── */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .tab-group {
+      display: flex;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .tab-group button {
+      padding: 7px 18px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all .2s;
+      font-family: inherit;
+      border-right: 1px solid var(--border);
+    }
+    .tab-group button:last-child { border-right: none; }
+    .tab-group button:hover { color: var(--text); background: #22263a; }
+    .tab-group button.active { background: var(--accent); color: #fff; font-weight: 600; }
+
+    .controls-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #refresh-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all .2s;
+      font-family: inherit;
+    }
+    #refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+    #refresh-btn svg { width: 14px; height: 14px; }
+    #refresh-btn.spinning svg { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #auto-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+    }
+    #auto-label input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
+    #countdown { font-variant-numeric: tabular-nums; }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 20px;
+      min-width: 140px;
+    }
+    .stat-card .label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .stat-card .value { font-size: 20px; font-weight: 700; }
+    .stat-card .value.up { color: var(--red); }
+    .stat-card .value.down { color: var(--green); }
+
+    /* ── Table ── */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    thead th {
+      padding: 12px 16px;
+      text-align: right;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+    thead th:first-child { text-align: left; }
+    thead th:hover { color: var(--text); }
+    thead th.sort-asc::after { content: ' ▲'; color: var(--accent); }
+    thead th.sort-desc::after { content: ' ▼'; color: var(--accent); }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .15s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #1e2233; }
+
+    td { padding: 11px 16px; text-align: right; }
+    td:first-child { text-align: left; }
+
+    .stock-name { font-weight: 600; font-size: 14px; }
+    .stock-code { font-size: 12px; color: var(--muted); margin-top: 1px; }
+    .badge {
+      display: inline-block;
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      margin-left: 4px;
+      vertical-align: middle;
+    }
+    .badge-sh { background: #1e3a5f; color: #5aa3f0; }
+    .badge-sz { background: #1e3a30; color: #4acea0; }
+
+    .up   { color: var(--red); }
+    .down { color: var(--green); }
+    .flat { color: var(--muted); }
+
+    .change-pct {
+      font-weight: 700;
+      font-size: 15px;
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+    .change-pct.up   { background: rgba(240,77,77,.12); }
+    .change-pct.down { background: rgba(18,184,110,.12); }
+    .change-pct.flat { background: transparent; }
+
+    .limit-up {
+      background: var(--red) !important;
+      color: #fff !important;
+    }
+
+    /* ── Pagination ── */
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .pagination button {
+      padding: 6px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      transition: all .2s;
+    }
+    .pagination button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .pagination button:disabled { opacity: 0.35; cursor: not-allowed; }
+    .pagination .page-info { font-size: 13px; color: var(--muted); }
+
+    /* ── Loading / Empty ── */
+    #loading, #empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+
+    /* ── Export ── */
+    #export-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all .2s;
+      font-family: inherit;
+    }
+    #export-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+    @media (max-width: 768px) {
+      header { padding: 0 12px; }
+      main { padding: 12px; }
+      td, th { padding: 9px 8px; font-size: 12px; }
+      .stat-card { min-width: 110px; padding: 10px 14px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
+    </svg>
+    A股&nbsp;<span>涨幅榜</span>
+  </div>
+  <div class="header-right">
+    <div id="market-badge" class="closed">
+      <div class="dot"></div>
+      <span id="market-status-text">加载中…</span>
+    </div>
+    <div id="clock">--:--:--</div>
+  </div>
+</header>
+
+<main>
+  <div class="controls">
+    <div class="tab-group" id="board-tabs">
+      <button data-board="all"      class="active">全部</button>
+      <button data-board="shanghai">沪市</button>
+      <button data-board="shenzhen">深市</button>
+      <button data-board="chinext" >创业板</button>
+      <button data-board="star"    >科创板</button>
+    </div>
+    <div class="controls-right">
+      <label id="auto-label">
+        <input type="checkbox" id="auto-refresh" checked />
+        自动刷新&nbsp;<span id="countdown"></span>
+      </label>
+      <button id="export-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        导出 CSV
+      </button>
+      <button id="refresh-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        刷新
+      </button>
+    </div>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="label">显示股票</div>
+      <div class="value" id="stat-total">--</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">最高涨幅</div>
+      <div class="value up" id="stat-max">--</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">涨停数量</div>
+      <div class="value up" id="stat-limit">--</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">平均涨幅</div>
+      <div class="value" id="stat-avg">--</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">更新时间</div>
+      <div class="value" id="stat-time" style="font-size:13px;margin-top:4px;color:var(--muted)">--</div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div id="loading">
+      <div class="spinner"></div>
+      <div>正在加载行情数据…</div>
+    </div>
+    <div id="empty" style="display:none">暂无数据</div>
+    <table id="stock-table" style="display:none">
+      <thead>
+        <tr>
+          <th data-col="rank">#</th>
+          <th data-col="name" style="text-align:left">股票</th>
+          <th data-col="change_pct">涨跌幅</th>
+          <th data-col="price">现价</th>
+          <th data-col="change">涨跌额</th>
+          <th data-col="open">今开</th>
+          <th data-col="high">最高</th>
+          <th data-col="low">最低</th>
+          <th data-col="prev_close">昨收</th>
+          <th data-col="volume">成交量(手)</th>
+          <th data-col="turnover">成交额(万)</th>
+          <th data-col="pe">市盈率</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="pagination" id="pagination" style="display:none">
+      <button id="prev-btn" disabled>上一页</button>
+      <span class="page-info">第 <span id="page-num">1</span> 页</span>
+      <button id="next-btn">下一页</button>
+    </div>
+  </div>
+</main>
+
+<script>
+  /* ── State ── */
+  let allData = [];
+  let page = 1;
+  let board = 'all';
+  let autoInterval = null;
+  let countdown = 30;
+  let sortCol = 'change_pct';
+  let sortDir = 'desc';
+  const PAGE_SIZE = 50;
+
+  /* ── Clock ── */
+  function tickClock() {
+    const now = new Date();
+    const bj = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+    const hh = String(bj.getHours()).padStart(2, '0');
+    const mm = String(bj.getMinutes()).padStart(2, '0');
+    const ss = String(bj.getSeconds()).padStart(2, '0');
+    document.getElementById('clock').textContent = `北京 ${hh}:${mm}:${ss}`;
+  }
+  setInterval(tickClock, 1000);
+  tickClock();
+
+  /* ── Fetch ── */
+  async function fetchData() {
+    const btn = document.getElementById('refresh-btn');
+    btn.classList.add('spinning');
+    try {
+      const res = await fetch(`/api/stocks?board=${board}&page=${page}&size=${PAGE_SIZE}`);
+      const json = await res.json();
+      if (json.success) {
+        allData = json.data;
+        updateMarketBadge(json.market_open, json.market_status);
+        document.getElementById('stat-time').textContent = json.time.slice(11);
+        renderTable();
+        renderStats();
+      } else {
+        console.error(json.error);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      btn.classList.remove('spinning');
+    }
+  }
+
+  function updateMarketBadge(open, status) {
+    const badge = document.getElementById('market-badge');
+    document.getElementById('market-status-text').textContent = status;
+    badge.className = open ? 'open' : 'closed';
+  }
+
+  /* ── Table render ── */
+  function sortedData() {
+    const d = [...allData];
+    d.sort((a, b) => {
+      let va = a[sortCol] ?? 0, vb = b[sortCol] ?? 0;
+      if (typeof va === 'string') va = parseFloat(va) || 0;
+      if (typeof vb === 'string') vb = parseFloat(vb) || 0;
+      return sortDir === 'asc' ? va - vb : vb - va;
+    });
+    return d;
+  }
+
+  function fmt(n, dec = 2) {
+    if (n === undefined || n === null || n === '' || n === '-') return '--';
+    const v = parseFloat(n);
+    return isNaN(v) ? '--' : v.toFixed(dec);
+  }
+  function fmtVol(n) {
+    if (!n || n === '-') return '--';
+    const v = parseInt(n);
+    if (isNaN(v)) return '--';
+    return v >= 10000 ? (v / 10000).toFixed(2) + '万' : v.toString();
+  }
+  function fmtTurnover(n) {
+    if (!n || n === '-') return '--';
+    const v = parseFloat(n);
+    if (isNaN(v)) return '--';
+    return (v / 10000).toFixed(2);
+  }
+
+  function pctClass(v) {
+    const n = parseFloat(v);
+    if (isNaN(n) || n === 0) return 'flat';
+    return n > 0 ? 'up' : 'down';
+  }
+  function isLimitUp(v) { return parseFloat(v) >= 9.9; }
+
+  function renderTable() {
+    const data = sortedData();
+    const tbody = document.getElementById('tbody');
+    const table = document.getElementById('stock-table');
+    const loading = document.getElementById('loading');
+    const empty = document.getElementById('empty');
+    const pagination = document.getElementById('pagination');
+
+    loading.style.display = 'none';
+
+    if (!data.length) {
+      table.style.display = 'none';
+      pagination.style.display = 'none';
+      empty.style.display = '';
+      return;
+    }
+    empty.style.display = 'none';
+    table.style.display = '';
+    pagination.style.display = 'flex';
+
+    tbody.innerHTML = data.map((s, i) => {
+      const pc = pctClass(s.change_pct);
+      const pctVal = fmt(s.change_pct) + '%';
+      const pctCls = isLimitUp(s.change_pct) ? 'change-pct limit-up' : `change-pct ${pc}`;
+      const sign = parseFloat(s.change) > 0 ? '+' : '';
+      const mktBadge = s.market === 'SH'
+        ? '<span class="badge badge-sh">沪</span>'
+        : '<span class="badge badge-sz">深</span>';
+      return `<tr>
+        <td style="color:var(--muted);font-size:12px">${(page - 1) * PAGE_SIZE + i + 1}</td>
+        <td>
+          <div class="stock-name">${s.name}${mktBadge}</div>
+          <div class="stock-code">${s.code}</div>
+        </td>
+        <td><span class="${pctCls}">${isLimitUp(s.change_pct) ? '涨停 ' : ''}${pctVal}</span></td>
+        <td class="${pc}">${fmt(s.price)}</td>
+        <td class="${pc}">${sign}${fmt(s.change)}</td>
+        <td>${fmt(s.open)}</td>
+        <td class="up">${fmt(s.high)}</td>
+        <td class="down">${fmt(s.low)}</td>
+        <td>${fmt(s.prev_close)}</td>
+        <td style="color:var(--muted)">${fmtVol(s.volume)}</td>
+        <td style="color:var(--muted)">${fmtTurnover(s.turnover)}</td>
+        <td style="color:var(--muted)">${fmt(s.pe)}</td>
+      </tr>`;
+    }).join('');
+
+    // Sort header highlight
+    document.querySelectorAll('thead th').forEach(th => {
+      th.classList.remove('sort-asc', 'sort-desc');
+      if (th.dataset.col === sortCol) {
+        th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+      }
+    });
+
+    document.getElementById('page-num').textContent = page;
+    document.getElementById('prev-btn').disabled = page <= 1;
+    document.getElementById('next-btn').disabled = data.length < PAGE_SIZE;
+  }
+
+  function renderStats() {
+    const data = allData.filter(s => !isNaN(parseFloat(s.change_pct)));
+    document.getElementById('stat-total').textContent = data.length;
+    if (!data.length) return;
+    const maxPct = Math.max(...data.map(s => parseFloat(s.change_pct) || 0));
+    const limits  = data.filter(s => parseFloat(s.change_pct) >= 9.9).length;
+    const avg = data.reduce((a, s) => a + (parseFloat(s.change_pct) || 0), 0) / data.length;
+    document.getElementById('stat-max').textContent = maxPct.toFixed(2) + '%';
+    document.getElementById('stat-limit').textContent = limits;
+    const avgEl = document.getElementById('stat-avg');
+    avgEl.textContent = (avg >= 0 ? '+' : '') + avg.toFixed(2) + '%';
+    avgEl.className = 'value ' + (avg > 0 ? 'up' : avg < 0 ? 'down' : 'flat');
+  }
+
+  /* ── Sort ── */
+  document.querySelectorAll('thead th[data-col]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      if (col === 'rank') return;
+      if (sortCol === col) {
+        sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+      } else {
+        sortCol = col;
+        sortDir = 'desc';
+      }
+      renderTable();
+    });
+  });
+
+  /* ── Board tabs ── */
+  document.querySelectorAll('#board-tabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#board-tabs button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      board = btn.dataset.board;
+      page = 1;
+      document.getElementById('loading').style.display = '';
+      document.getElementById('stock-table').style.display = 'none';
+      fetchData();
+    });
+  });
+
+  /* ── Pagination ── */
+  document.getElementById('prev-btn').addEventListener('click', () => { page--; fetchData(); });
+  document.getElementById('next-btn').addEventListener('click', () => { page++; fetchData(); });
+
+  /* ── Refresh btn ── */
+  document.getElementById('refresh-btn').addEventListener('click', fetchData);
+
+  /* ── Auto-refresh ── */
+  function startAuto() {
+    countdown = 30;
+    clearInterval(autoInterval);
+    autoInterval = setInterval(() => {
+      countdown--;
+      document.getElementById('countdown').textContent = `(${countdown}s)`;
+      if (countdown <= 0) {
+        fetchData();
+        countdown = 30;
+      }
+    }, 1000);
+  }
+  function stopAuto() {
+    clearInterval(autoInterval);
+    document.getElementById('countdown').textContent = '';
+  }
+  document.getElementById('auto-refresh').addEventListener('change', function () {
+    this.checked ? startAuto() : stopAuto();
+  });
+
+  /* ── CSV export ── */
+  document.getElementById('export-btn').addEventListener('click', () => {
+    if (!allData.length) return;
+    const headers = ['序号','代码','名称','市场','涨跌幅%','现价','涨跌额','今开','最高','最低','昨收','成交量(手)','成交额(万)','市盈率'];
+    const rows = sortedData().map((s, i) => [
+      (page - 1) * PAGE_SIZE + i + 1,
+      s.code, s.name, s.market,
+      fmt(s.change_pct), fmt(s.price), fmt(s.change),
+      fmt(s.open), fmt(s.high), fmt(s.low), fmt(s.prev_close),
+      s.volume, fmtTurnover(s.turnover), fmt(s.pe),
+    ]);
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }).replace(/[/:]/g, '-').replace(/\s/g, '_');
+    a.download = `涨幅榜_${now}.csv`;
+    a.click();
+  });
+
+  /* ── Init ── */
+  fetchData();
+  startAuto();
+</script>
+</body>
+</html>
