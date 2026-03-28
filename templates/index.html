@@ -50,6 +50,17 @@
     #auto-label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer;user-select:none;}
     #auto-label input{accent-color:var(--accent);width:14px;height:14px;}
 
+    /* Index bar */
+    .index-bar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+    .index-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 16px;flex:1;min-width:140px;cursor:default;transition:border-color .2s;}
+    .index-card:hover{border-color:var(--accent);}
+    .index-card .idx-name{font-size:11px;color:var(--muted);margin-bottom:4px;}
+    .index-card .idx-price{font-size:18px;font-weight:700;letter-spacing:.02em;}
+    .index-card .idx-change{font-size:12px;margin-top:3px;}
+    .index-card .idx-extra{font-size:11px;color:var(--muted);margin-top:2px;}
+    .index-card.up-card{border-color:rgba(240,77,77,.25);}
+    .index-card.down-card{border-color:rgba(18,184,110,.25);}
+
     /* Stats */
     .stats-bar{display:flex;gap:14px;margin-bottom:20px;flex-wrap:wrap;}
     .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 18px;min-width:130px;}
@@ -249,6 +260,14 @@
     </div>
   </div>
 
+  <!-- 大盘指数 -->
+  <div class="index-bar" id="index-bar">
+    <div class="index-card" id="idx-000001"><div class="idx-name">上证指数</div><div class="idx-price">--</div><div class="idx-change">--</div><div class="idx-extra">--</div></div>
+    <div class="index-card" id="idx-399001"><div class="idx-name">深证成指</div><div class="idx-price">--</div><div class="idx-change">--</div><div class="idx-extra">--</div></div>
+    <div class="index-card" id="idx-399006"><div class="idx-name">创业板指</div><div class="idx-price">--</div><div class="idx-change">--</div><div class="idx-extra">--</div></div>
+    <div class="index-card" id="idx-000688"><div class="idx-name">科创50</div><div class="idx-price">--</div><div class="idx-change">--</div><div class="idx-extra">--</div></div>
+  </div>
+
   <div id="screen-banner">
     <div class="banner-title">★ 2:30 选股条件</div>
     <div class="banner-conditions" id="banner-conditions"></div>
@@ -257,6 +276,7 @@
 
   <div class="stats-bar">
     <div class="stat-card"><div class="label">显示股票</div><div class="value" id="stat-total">--</div></div>
+    <div class="stat-card"><div class="label">涨跌比</div><div class="value" id="stat-ratio">--</div></div>
     <div class="stat-card"><div class="label">最高涨幅</div><div class="value up" id="stat-max">--</div></div>
     <div class="stat-card"><div class="label">涨停数量</div><div class="value up" id="stat-limit">--</div></div>
     <div class="stat-card"><div class="label">平均涨幅</div><div class="value" id="stat-avg">--</div></div>
@@ -287,7 +307,8 @@
           <th data-col="open">今开</th>
           <th data-col="high">最高</th>
           <th data-col="low">最低</th>
-          <th data-col="volume">成交量</th>
+          <th data-col="amplitude">振幅</th>
+          <th data-col="turnover">成交额</th>
           <th data-col="pe">市盈率</th>
         </tr>
       </thead>
@@ -424,9 +445,38 @@ function init() {
   loadWatchlist();
   applySettingsToUI();
   fetchData();
+  fetchIndices();
   startAuto();
   startClockAndAutoScreenCheck();
 }
+
+/* ═══════════════════════════════════════════════════════
+   Indices
+═══════════════════════════════════════════════════════ */
+async function fetchIndices() {
+  try {
+    const res = await fetch('/api/indices');
+    const json = await res.json();
+    if (!json.success) return;
+    json.data.forEach(idx => {
+      const el = document.getElementById('idx-' + idx.code);
+      if (!el) return;
+      const pct = parseFloat(idx.change_pct);
+      const isUp = pct > 0, isDown = pct < 0;
+      const cls = isUp ? 'up' : isDown ? 'down' : 'flat';
+      const sign = pct > 0 ? '+' : '';
+      const amp = idx.prev_close > 0
+        ? ((parseFloat(idx.high) - parseFloat(idx.low)) / parseFloat(idx.prev_close) * 100).toFixed(2)
+        : '--';
+      el.querySelector('.idx-price').textContent = parseFloat(idx.price).toFixed(2);
+      el.querySelector('.idx-price').className = 'idx-price ' + cls;
+      el.querySelector('.idx-change').innerHTML = `<span class="${cls}">${sign}${pct.toFixed(2)}%&nbsp;&nbsp;${sign}${parseFloat(idx.change).toFixed(2)}</span>`;
+      el.querySelector('.idx-extra').textContent = `振幅 ${amp}%  量 ${fmtMoney(idx.turnover)}`;
+      el.className = 'index-card ' + (isUp ? 'up-card' : isDown ? 'down-card' : '');
+    });
+  } catch(e) { console.error(e); }
+}
+setInterval(fetchIndices, 10000);
 
 /* ═══════════════════════════════════════════════════════
    Clock & Auto-screen at 14:30
@@ -731,9 +781,19 @@ function fmtVol(n) {
   const v=parseInt(n); if(isNaN(v)) return '--';
   return v>=100000000?(v/100000000).toFixed(2)+'亿':v>=10000?(v/10000).toFixed(2)+'万':v.toString();
 }
+function fmtMoney(n) {
+  if (!n||n==='-') return '--';
+  const v=parseFloat(n); if(isNaN(v)||v<=0) return '--';
+  return v>=1e12?(v/1e12).toFixed(2)+'万亿':v>=1e8?(v/1e8).toFixed(2)+'亿':v>=1e4?(v/1e4).toFixed(0)+'万':'--';
+}
 function fmtCap(n) {
   if (!n||n==='-') return '--';
   const v=parseFloat(n); return isNaN(v)?'--':(v/1e8).toFixed(2);
+}
+function fmtAmp(s) {
+  const h=parseFloat(s.high), l=parseFloat(s.low), pc=parseFloat(s.prev_close);
+  if(!h||!l||!pc||pc<=0) return '--';
+  return ((h-l)/pc*100).toFixed(2)+'%';
 }
 function pctClass(v) { const n=parseFloat(v); if(isNaN(n)||n===0) return 'flat'; return n>0?'up':'down'; }
 function isLimitUp(v) { return parseFloat(v)>=9.9; }
@@ -775,7 +835,8 @@ function renderNormalTable() {
       <td>${fmt(s.open)}</td>
       <td class="up">${fmt(s.high)}</td>
       <td class="down">${fmt(s.low)}</td>
-      <td style="color:var(--muted)">${fmtVol(s.volume)}</td>
+      <td style="color:var(--muted)">${fmtAmp(s)}</td>
+      <td style="color:var(--muted)">${fmtMoney(s.turnover)}</td>
       <td style="color:var(--muted)">${fmt(s.pe)}</td>
     </tr>`;
   }).join('');
@@ -836,11 +897,16 @@ function renderStats() {
   const valid = data.filter(s=>!isNaN(parseFloat(s.change_pct)));
   document.getElementById('stat-total').textContent = isScreenMode ? `${screenCandidates.filter(s=>s.pass).length}/${screenCandidates.length}` : valid.length;
   if (!valid.length) return;
-  const maxPct = Math.max(...valid.map(s=>parseFloat(s.change_pct)||0));
+  const maxPct  = Math.max(...valid.map(s=>parseFloat(s.change_pct)||0));
   const limits  = valid.filter(s=>parseFloat(s.change_pct)>=9.9).length;
+  const upCount = valid.filter(s=>parseFloat(s.change_pct)>0).length;
+  const dnCount = valid.filter(s=>parseFloat(s.change_pct)<0).length;
   const avg = valid.reduce((a,s)=>a+(parseFloat(s.change_pct)||0),0)/valid.length;
   document.getElementById('stat-max').textContent = maxPct.toFixed(2)+'%';
   document.getElementById('stat-limit').textContent = limits;
+  const ratioEl = document.getElementById('stat-ratio');
+  ratioEl.innerHTML = `<span class="up">${upCount}</span><span style="color:var(--muted)"> / </span><span class="down">${dnCount}</span>`;
+  ratioEl.className = 'value';
   const el = document.getElementById('stat-avg');
   el.textContent = (avg>=0?'+':'')+avg.toFixed(2)+'%';
   el.className = 'value '+(avg>0?'up':avg<0?'down':'flat');
@@ -955,10 +1021,10 @@ document.getElementById('export-btn').addEventListener('click', ()=>{
   if (!data.length) return;
   const headers = isScreenMode
     ? ['序号','代码','名称','市场','涨跌幅%','现价','量比','换手率%','市值(亿)','30日涨停','通过','原因']
-    : ['序号','代码','名称','市场','涨跌幅%','现价','涨跌额','量比','换手率%','市值(亿)','今开','最高','最低','昨收','成交量','市盈率'];
+    : ['序号','代码','名称','市场','涨跌幅%','现价','涨跌额','量比','换手率%','市值(亿)','今开','最高','最低','振幅%','昨收','成交额','市盈率'];
   const rows = data.map((s,i)=>isScreenMode
     ? [i+1,s.code,s.name,s.market,fmt(s.change_pct),fmt(s.price),fmt(s.volume_ratio),fmt(s.turnover_rate),(parseFloat(s.market_cap)/1e8).toFixed(2),s.had_limit_up?'是':'否',s.pass?'是':'否',s.fail_reason||'']
-    : [i+1,s.code,s.name,s.market,fmt(s.change_pct),fmt(s.price),fmt(s.change),fmt(s.volume_ratio),fmt(s.turnover_rate),(parseFloat(s.market_cap)/1e8).toFixed(2),fmt(s.open),fmt(s.high),fmt(s.low),fmt(s.prev_close),s.volume,fmt(s.pe)]
+    : [i+1,s.code,s.name,s.market,fmt(s.change_pct),fmt(s.price),fmt(s.change),fmt(s.volume_ratio),fmt(s.turnover_rate),(parseFloat(s.market_cap)/1e8).toFixed(2),fmt(s.open),fmt(s.high),fmt(s.low),fmtAmp(s),fmt(s.prev_close),fmtMoney(s.turnover),fmt(s.pe)]
   );
   const csv=[headers,...rows].map(r=>r.join(',')).join('\n');
   const a=document.createElement('a');

@@ -178,6 +178,37 @@ function nowStr() {
          `${pad(bj.getHours())}:${pad(bj.getMinutes())}:${pad(bj.getSeconds())}`;
 }
 
+// 大盘指数行情
+const INDEX_SECIDS = ['1.000001', '0.399001', '0.399006', '0.000688'];
+const INDEX_NAMES  = { '000001':'上证指数', '399001':'深证成指', '399006':'创业板指', '000688':'科创50' };
+
+async function fetchIndices() {
+  const params = new URLSearchParams({
+    secids: INDEX_SECIDS.join(','),
+    fields: 'f2,f3,f4,f5,f6,f12,f13,f14,f15,f16,f17,f18',
+    fltt: 2, invt: 2, _: Date.now(),
+  });
+  try {
+    const resp = await fetch(`https://push2.eastmoney.com/api/qt/ulist.np/get?${params}`, {
+      headers: EM_HEADERS, signal: AbortSignal.timeout(6000),
+    });
+    const raw = await resp.json();
+    return (raw?.data?.diff ?? []).map(item => ({
+      code:       item.f12 ?? '',
+      name:       INDEX_NAMES[item.f12] ?? item.f14 ?? '',
+      price:      item.f2  ?? 0,
+      change_pct: item.f3  ?? 0,
+      change:     item.f4  ?? 0,
+      volume:     item.f5  ?? 0,
+      turnover:   item.f6  ?? 0,
+      high:       item.f15 ?? 0,
+      low:        item.f16 ?? 0,
+      open:       item.f17 ?? 0,
+      prev_close: item.f18 ?? 0,
+    }));
+  } catch { return []; }
+}
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'templates', 'index.html')));
@@ -190,6 +221,16 @@ app.get('/api/stocks', async (req, res) => {
     const data = await fetchTopGainers(page, pageSize, board);
     const { open, status } = getMarketStatus();
     res.json({ success: true, data, market_open: open, market_status: status, time: nowStr(), total: data.length });
+  } catch (e) {
+    res.json({ success: false, error: e.message, data: [] });
+  }
+});
+
+// 大盘指数
+app.get('/api/indices', async (req, res) => {
+  try {
+    const data = await fetchIndices();
+    res.json({ success: true, data });
   } catch (e) {
     res.json({ success: false, error: e.message, data: [] });
   }
