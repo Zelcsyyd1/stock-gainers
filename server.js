@@ -240,6 +240,30 @@ app.get('/api/stocks', async (req, res) => {
   }
 });
 
+// 全市场股票搜索
+app.get('/api/search', async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q) return res.json({ success: true, data: [] });
+  try {
+    // 1. 用东方财富 suggest 接口搜索股票代码/名称
+    const suggestResp = await fetch(
+      `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(q)}&type=14&token=D43BF722C8E33BDC906FB84D85E326EC&count=10`,
+      { headers: EM_HEADERS, signal: AbortSignal.timeout(6000) }
+    );
+    const suggestRaw = await suggestResp.json();
+    const hits = suggestRaw?.QuotationCodeTable?.Data ?? [];
+    // 只保留 A 股（MktNum 0=深 1=沪）
+    const stocks = hits.filter(h => h.MktNum === '0' || h.MktNum === '1');
+    if (!stocks.length) return res.json({ success: true, data: [] });
+    // 2. 批量拉行情
+    const secids = stocks.map(h => `${h.MktNum === '1' ? 1 : 0}.${h.Code}`);
+    const quotes = await fetchQuotesBySecids(secids);
+    res.json({ success: true, data: quotes });
+  } catch (e) {
+    res.json({ success: false, error: e.message, data: [] });
+  }
+});
+
 // 大盘指数
 app.get('/api/indices', async (req, res) => {
   try {

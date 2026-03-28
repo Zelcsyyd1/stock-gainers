@@ -177,6 +177,18 @@
     .hi-stock-tag.up{border-color:rgba(240,77,77,.3);color:var(--red);}
     #history-empty{text-align:center;padding:40px;color:var(--muted);}
 
+    /* Search bar */
+    .search-wrap{position:relative;display:flex;align-items:center;margin-bottom:16px;}
+    #search-input{width:100%;padding:9px 40px 9px 36px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .2s;}
+    #search-input:focus{border-color:var(--accent);}
+    #search-input::placeholder{color:var(--muted);}
+    .search-icon{position:absolute;left:10px;color:var(--muted);pointer-events:none;width:16px;height:16px;}
+    #search-clear{position:absolute;right:10px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;display:none;padding:2px;}
+    #search-clear:hover{color:var(--text);}
+    .search-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;background:rgba(78,142,247,.12);border:1px solid rgba(78,142,247,.3);border-radius:6px;font-size:12px;color:var(--accent);margin-bottom:12px;}
+    .search-badge button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 4px;}
+    .search-badge button:hover{color:var(--text);}
+
     @media(max-width:768px){
       header{padding:0 12px;}
       main{padding:12px;}
@@ -258,6 +270,19 @@
         2:30 选股
       </button>
     </div>
+  </div>
+
+  <!-- 搜索栏 -->
+  <div class="search-wrap">
+    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+    <input id="search-input" type="text" placeholder="搜索股票名称或代码（如：平安银行、000001）" autocomplete="off"/>
+    <button id="search-clear">✕</button>
+  </div>
+  <div id="search-badge" style="display:none" class="search-badge">
+    <span id="search-badge-text"></span>
+    <button onclick="clearSearch()">✕</button>
   </div>
 
   <!-- 大盘指数 -->
@@ -634,6 +659,8 @@ function updateMarketBadge(open, status) {
 ═══════════════════════════════════════════════════════ */
 async function runScreen() {
   isScreenMode = true;
+  isSearchMode = false; searchResults = [];
+  document.getElementById('search-badge').style.display = 'none';
   stopAuto();
   const btn = document.getElementById('screen-btn');
   btn.disabled = true;
@@ -809,7 +836,7 @@ function sortedData(data) {
 function renderNormalTable() {
   document.getElementById('thead-normal').style.display = '';
   document.getElementById('thead-screen').style.display = 'none';
-  const sorted = sortedData(allData);
+  const sorted = sortedData(isSearchMode ? searchResults : allData);
   hideAll();
   if (!sorted.length) { showEmpty(isWatchlistMode ? '自选股为空，从涨幅榜点 ☆ 添加' : '暂无数据'); return; }
   showTable();
@@ -899,7 +926,7 @@ function renderScreenTable(candidates) {
 }
 
 function renderStats() {
-  const data = isScreenMode ? screenCandidates : allData;
+  const data = isScreenMode ? screenCandidates : (isSearchMode ? searchResults : allData);
   const valid = data.filter(s=>!isNaN(parseFloat(s.change_pct)));
   document.getElementById('stat-total').textContent = isScreenMode ? `${screenCandidates.filter(s=>s.pass).length}/${screenCandidates.length}` : valid.length;
   if (!valid.length) return;
@@ -1019,6 +1046,85 @@ document.getElementById('notif-btn').addEventListener('click', ()=>{
   openSettings();
   setTimeout(()=>document.getElementById('s-browser-notif').scrollIntoView({behavior:'smooth'}), 300);
 });
+
+/* ═══════════════════════════════════════════════════════
+   Search
+═══════════════════════════════════════════════════════ */
+let searchTimer = null;
+let isSearchMode = false;
+
+const searchInput = document.getElementById('search-input');
+const searchClear = document.getElementById('search-clear');
+
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.trim();
+  searchClear.style.display = q ? 'block' : 'none';
+  clearTimeout(searchTimer);
+  if (!q) { clearSearch(); return; }
+  searchTimer = setTimeout(() => doSearch(q), 300);
+});
+
+searchInput.addEventListener('keydown', e => {
+  if (e.key === 'Escape') clearSearch();
+});
+
+searchClear.addEventListener('click', clearSearch);
+
+async function doSearch(q) {
+  if (isScreenMode) return;
+  // 先在已加载数据中快速匹配
+  const localHits = allData.filter(s =>
+    s.code.includes(q) || s.name.includes(q)
+  );
+  if (localHits.length) {
+    showSearchResults(localHits, q, '榜单内');
+    return;
+  }
+  // 本地无结果 → 搜索全市场
+  isSearchMode = true;
+  showLoading();
+  document.getElementById('search-badge').style.display = 'none';
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+    const json = await res.json();
+    if (json.success && json.data.length) {
+      showSearchResults(json.data, q, '全市场');
+    } else {
+      showEmpty(`未找到与 "${q}" 匹配的股票`);
+      isSearchMode = false;
+    }
+  } catch(e) {
+    showEmpty('搜索失败，请重试');
+    isSearchMode = false;
+  }
+}
+
+let searchResults = [];
+
+function showSearchResults(data, q, scope) {
+  isSearchMode = true;
+  stopAuto();
+  searchResults = data;
+  document.getElementById('search-badge-text').textContent = `${scope}搜索 "${q}"，共 ${data.length} 条结果`;
+  document.getElementById('search-badge').style.display = 'flex';
+  page = 1;
+  renderNormalTable();
+  renderStats();
+}
+
+function clearSearch() {
+  isSearchMode = false;
+  searchResults = [];
+  searchInput.value = '';
+  searchClear.style.display = 'none';
+  document.getElementById('search-badge').style.display = 'none';
+  page = 1;
+  if (!isScreenMode) {
+    startAuto();
+    renderNormalTable();
+    renderStats();
+  }
+}
 
 /* ═══════════════════════════════════════════════════════
    CSV Export
