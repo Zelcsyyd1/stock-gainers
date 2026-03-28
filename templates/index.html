@@ -431,7 +431,8 @@ let autoInterval = null, countdown = 30;
 let sortCol = 'change_pct', sortDir = 'desc';
 let isScreenMode = false, isWatchlistMode = false;
 let autoScreenDone = false; // 防止同一天重复自动选股
-const PAGE_SIZE = 300;
+const FETCH_SIZE = 300;   // 后端每次拉取总数
+const PAGE_SIZE  = 50;    // 每页显示数
 
 // 默认设置
 const DEFAULT_SETTINGS = { min_pct:3, max_pct:5, max_cap:200, min_vr:1, min_tr:5, max_tr:10, browser_notif:false, auto_screen:false, webhook:'' };
@@ -609,7 +610,7 @@ async function fetchData() {
   const btn = document.getElementById('refresh-btn');
   btn.classList.add('spinning');
   try {
-    const res = await fetch(`/api/stocks?board=${board}&page=${page}&size=${PAGE_SIZE}`);
+    const res = await fetch(`/api/stocks?board=${board}&size=${FETCH_SIZE}`);
     const json = await res.json();
     if (json.success) {
       allData = json.data;
@@ -808,12 +809,16 @@ function sortedData(data) {
 function renderNormalTable() {
   document.getElementById('thead-normal').style.display = '';
   document.getElementById('thead-screen').style.display = 'none';
-  const data = sortedData(allData);
+  const sorted = sortedData(allData);
   hideAll();
-  if (!data.length) { showEmpty(isWatchlistMode ? '自选股为空，从涨幅榜点 ☆ 添加' : '暂无数据'); return; }
+  if (!sorted.length) { showEmpty(isWatchlistMode ? '自选股为空，从涨幅榜点 ☆ 添加' : '暂无数据'); return; }
   showTable();
 
-  document.getElementById('tbody').innerHTML = data.map((s,i) => {
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  if (page > totalPages) page = totalPages;
+  const pageData = sorted.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
+
+  document.getElementById('tbody').innerHTML = pageData.map((s,i) => {
     const pc = pctClass(s.change_pct);
     const pctCls = isLimitUp(s.change_pct) ? 'change-pct limit-up' : `change-pct ${pc}`;
     const mkt = s.market==='SH' ? '<span class="badge badge-sh">沪</span>' : '<span class="badge badge-sz">深</span>';
@@ -822,9 +827,10 @@ function renderNormalTable() {
     const capC = capV>0&&capV<20e9 ? 'style="color:var(--green)"' : '';
     const vrC  = vrV>1             ? 'style="color:var(--gold)"'  : '';
     const trC  = trV>=5&&trV<=10   ? 'style="color:var(--gold)"'  : '';
+    const globalIdx = (page-1)*PAGE_SIZE + i + 1;
     return `<tr>
       <td><button class="star-btn ${starred?'starred':''}" data-code="${s.code}" data-name="${s.name}" onclick="toggleStar('${s.code}','${s.name}')">${starred?'★':'☆'}</button></td>
-      <td style="color:var(--muted);font-size:11px">${(page-1)*PAGE_SIZE+i+1}</td>
+      <td style="color:var(--muted);font-size:11px">${globalIdx}</td>
       <td><div class="stock-name">${s.name}${mkt}</div><div class="stock-code">${s.code}</div></td>
       <td><span class="${pctCls}">${isLimitUp(s.change_pct)?'涨停 ':''}${fmt(s.change_pct)}%</span></td>
       <td class="${pc}">${fmt(s.price)}</td>
@@ -845,11 +851,10 @@ function renderNormalTable() {
     th.classList.remove('sort-asc','sort-desc');
     if (th.dataset.col===sortCol) th.classList.add(sortDir==='asc'?'sort-asc':'sort-desc');
   });
-  document.getElementById('page-num').textContent = page;
-  document.getElementById('prev-btn').disabled = page<=1;
-  document.getElementById('next-btn').disabled = !isWatchlistMode && data.length<PAGE_SIZE;
-  // 300条一次加载完，无需翻页
-  document.getElementById('pagination').style.display = (PAGE_SIZE <= 100) ? 'flex' : 'none';
+  document.getElementById('page-num').textContent = `${page} / ${totalPages}`;
+  document.getElementById('prev-btn').disabled = page <= 1;
+  document.getElementById('next-btn').disabled = page >= totalPages;
+  document.getElementById('pagination').style.display = 'flex';
 }
 
 function renderScreenTable(candidates) {
@@ -972,7 +977,7 @@ document.querySelectorAll('#board-tabs button').forEach(btn => {
     const b = btn.dataset.board;
     isWatchlistMode = b === 'watchlist';
     board = isWatchlistMode ? 'all' : b;
-    page = 1;
+    page = 1; sortCol = 'change_pct'; sortDir = 'desc';
     showLoading();
     fetchData();
     startAuto();
@@ -989,6 +994,7 @@ document.querySelectorAll('#thead-normal th[data-col]').forEach(th => {
     if (col==='rank'||col==='name') return;
     sortDir = sortCol===col ? (sortDir==='desc'?'asc':'desc') : 'desc';
     sortCol = col;
+    page = 1;
     renderNormalTable();
   });
 });
@@ -996,8 +1002,8 @@ document.querySelectorAll('#thead-normal th[data-col]').forEach(th => {
 /* ═══════════════════════════════════════════════════════
    Buttons
 ═══════════════════════════════════════════════════════ */
-document.getElementById('prev-btn').addEventListener('click', ()=>{ page--; fetchData(); });
-document.getElementById('next-btn').addEventListener('click', ()=>{ page++; fetchData(); });
+document.getElementById('prev-btn').addEventListener('click', ()=>{ if(page>1){ page--; renderNormalTable(); } });
+document.getElementById('next-btn').addEventListener('click', ()=>{ page++; renderNormalTable(); });
 document.getElementById('refresh-btn').addEventListener('click', ()=>{ if(isScreenMode) exitScreenMode(); else fetchData(); });
 document.getElementById('screen-btn').addEventListener('click', ()=>{ if(isScreenMode) runScreen(); else runScreen(); });
 document.getElementById('settings-btn').addEventListener('click', openSettings);
