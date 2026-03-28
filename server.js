@@ -37,11 +37,11 @@ const EM_HEADERS = {
 };
 
 const FS_MAP = {
-  all:      'm:0+t:6,m:0+t:13,m:1+t:2,m:1+t:23',
-  shanghai: 'm:0+t:6',
-  shenzhen: 'm:1+t:2',
-  chinext:  'm:1+t:23',
-  star:     'm:0+t:13',
+  all:      'm:0+t:6,m:1+t:2,m:0+t:23,m:1+t:23',
+  shanghai: 'm:1+t:2',    // 沪市主板 600/601/603
+  shenzhen: 'm:0+t:6',    // 深市主板 000/001/002/003
+  chinext:  'm:0+t:23',   // 创业板 300/301
+  star:     'm:1+t:23',   // 科创板 688
 };
 
 async function fetchTopGainers(page = 1, pageSize = 50, board = 'all') {
