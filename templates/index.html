@@ -431,7 +431,7 @@ let autoInterval = null, countdown = 30;
 let sortCol = 'change_pct', sortDir = 'desc';
 let isScreenMode = false, isWatchlistMode = false;
 let autoScreenDone = false; // 防止同一天重复自动选股
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 300;
 
 // 默认设置
 const DEFAULT_SETTINGS = { min_pct:3, max_pct:5, max_cap:200, min_vr:1, min_tr:5, max_tr:10, browser_notif:false, auto_screen:false, webhook:'' };
@@ -848,7 +848,8 @@ function renderNormalTable() {
   document.getElementById('page-num').textContent = page;
   document.getElementById('prev-btn').disabled = page<=1;
   document.getElementById('next-btn').disabled = !isWatchlistMode && data.length<PAGE_SIZE;
-  document.getElementById('pagination').style.display = 'flex';
+  // 300条一次加载完，无需翻页
+  document.getElementById('pagination').style.display = (PAGE_SIZE <= 100) ? 'flex' : 'none';
 }
 
 function renderScreenTable(candidates) {

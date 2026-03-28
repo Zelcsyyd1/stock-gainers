@@ -215,10 +215,24 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'templates', 'index
 
 app.get('/api/stocks', async (req, res) => {
   const board    = req.query.board || 'all';
-  const page     = parseInt(req.query.page || '1');
-  const pageSize = parseInt(req.query.size || '50');
+  const pageSize = Math.min(parseInt(req.query.size || '300'), 500);
   try {
-    const data = await fetchTopGainers(page, pageSize, board);
+    let data;
+    if (pageSize <= 100) {
+      const page = parseInt(req.query.page || '1');
+      data = await fetchTopGainers(page, pageSize, board);
+    } else {
+      // 并发拉多页（每页100条）再合并去重
+      const pagesNeeded = Math.ceil(pageSize / 100);
+      const pages = await Promise.all(
+        Array.from({ length: pagesNeeded }, (_, i) => fetchTopGainers(i + 1, 100, board).catch(() => []))
+      );
+      const seen = new Set();
+      data = pages.flat().filter(s => {
+        if (seen.has(s.code)) return false;
+        seen.add(s.code); return true;
+      }).slice(0, pageSize);
+    }
     const { open, status } = getMarketStatus();
     res.json({ success: true, data, market_open: open, market_status: status, time: nowStr(), total: data.length });
   } catch (e) {
