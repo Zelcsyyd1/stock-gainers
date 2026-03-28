@@ -50,7 +50,7 @@ async function fetchTopGainers(page = 1, pageSize = 50, board = 'all') {
     pn: page, pz: pageSize, po: 1, np: 1,
     ut: 'bd1d9ddb04089700cf9c27f6f7426281',
     fltt: 2, invt: 2, fid: 'f3', fs,
-    fields: 'f2,f3,f4,f5,f6,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20',
+    fields: 'f2,f3,f4,f5,f6,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f62,f184',
     _: Date.now(),
   });
   const resp = await fetch(`https://push2.eastmoney.com/api/qt/clist/get?${params}`, {
@@ -75,6 +75,8 @@ async function fetchTopGainers(page = 1, pageSize = 50, board = 'all') {
       open:          item.f17 ?? 0,
       prev_close:    item.f18 ?? 0,
       market_cap:    item.f20 ?? 0,
+      net_inflow:    item.f62  ?? 0,   // 主力净流入（元）
+      inflow_pct:    item.f184 ?? 0,   // 主力净流入占比（%）
       market:        item.f13 === 1 ? 'SH' : 'SZ',
     }));
 }
@@ -177,6 +179,38 @@ function nowStr() {
   return `${bj.getFullYear()}-${pad(bj.getMonth()+1)}-${pad(bj.getDate())} ` +
          `${pad(bj.getHours())}:${pad(bj.getMinutes())}:${pad(bj.getSeconds())}`;
 }
+
+// K线 + 分时图 + 连板数
+app.get('/api/chart/:code', async (req, res) => {
+  const code = req.params.code;
+  const secid = getSecId(code);
+  const threshold = (code.startsWith('3') || code.startsWith('688')) ? 19.5 : 9.9;
+  try {
+    const [klineResp, trends] = await Promise.all([
+      fetch(
+        `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}` +
+        `&fields1=f1,f2,f3,f4,f5&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61` +
+        `&klt=101&fqt=0&end=20991231&lmt=60`,
+        { headers: EM_HEADERS, signal: AbortSignal.timeout(8000) }
+      ),
+      fetchIntradayTrends(code),
+    ]);
+    const klineRaw = await klineResp.json();
+    const klines = (klineRaw?.data?.klines ?? []).map(k => {
+      const p = k.split(',');
+      return { date: p[0], open: +p[1], close: +p[2], high: +p[3], low: +p[4], volume: +p[5], change_pct: +p[8] };
+    });
+    // 连板数：从最新一天往前数连续涨停天数
+    let consecutive = 0;
+    for (let i = klines.length - 1; i >= 0; i--) {
+      if (klines[i].change_pct >= threshold) consecutive++;
+      else break;
+    }
+    res.json({ success: true, klines, trends, consecutive });
+  } catch (e) {
+    res.json({ success: false, error: e.message, klines: [], trends: [], consecutive: 0 });
+  }
+});
 
 // 大盘指数行情
 const INDEX_SECIDS = ['1.000001', '0.399001', '0.399006', '0.000688'];

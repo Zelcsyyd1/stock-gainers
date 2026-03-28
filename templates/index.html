@@ -177,6 +177,27 @@
     .hi-stock-tag.up{border-color:rgba(240,77,77,.3);color:var(--red);}
     #history-empty{text-align:center;padding:40px;color:var(--muted);}
 
+    /* Chart Modal */
+    #chart-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:600;display:none;align-items:center;justify-content:center;}
+    #chart-modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:min(860px,96vw);max-height:90vh;overflow:hidden;display:flex;flex-direction:column;}
+    #chart-modal .modal-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+    .chart-stock-info{display:flex;align-items:baseline;gap:10px;}
+    .chart-stock-name{font-size:16px;font-weight:700;}
+    .chart-stock-code{font-size:12px;color:var(--muted);}
+    .chart-price{font-size:20px;font-weight:700;}
+    .chart-pct{font-size:14px;font-weight:600;padding:2px 8px;border-radius:4px;}
+    .chart-tabs{display:flex;background:var(--bg);border:1px solid var(--border);border-radius:6px;overflow:hidden;margin:0 20px;}
+    .chart-tab{padding:5px 16px;border:none;background:transparent;color:var(--muted);font-size:13px;cursor:pointer;font-family:inherit;transition:all .2s;}
+    .chart-tab.active{background:var(--accent);color:#fff;font-weight:600;}
+    .chart-body{padding:16px 20px;overflow-y:auto;}
+    .chart-meta{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;}
+    .meta-item{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:12px;}
+    .meta-item .ml{color:var(--muted);margin-bottom:2px;}
+    .meta-item .mv{font-weight:600;}
+    .chart-svg-wrap{background:var(--bg);border-radius:8px;padding:8px;overflow:hidden;}
+    .chart-loading{text-align:center;padding:60px;color:var(--muted);}
+    .consecutive-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:var(--red);color:#fff;margin-left:6px;vertical-align:middle;}
+
     /* Compare button on rows */
     .cmp-btn{background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:10px;color:var(--muted);padding:1px 5px;line-height:1.6;transition:all .15s;white-space:nowrap;}
     .cmp-btn:hover{border-color:var(--accent);color:var(--accent);}
@@ -370,6 +391,7 @@
           <th data-col="low">最低</th>
           <th data-col="amplitude">振幅</th>
           <th data-col="turnover">成交额</th>
+          <th data-col="net_inflow">主力净流入</th>
           <th data-col="pe">市盈率</th>
         </tr>
       </thead>
@@ -398,6 +420,36 @@
     </div>
   </div>
 </main>
+
+<!-- Chart Modal -->
+<div id="chart-overlay" style="display:none">
+  <div id="chart-modal">
+    <div class="modal-header">
+      <div class="chart-stock-info">
+        <span class="chart-stock-name" id="chart-name"></span>
+        <span class="chart-stock-code" id="chart-code"></span>
+        <span id="chart-consecutive"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="chart-price" id="chart-price"></span>
+        <span class="chart-pct" id="chart-pct"></span>
+        <button class="modal-close" id="chart-close">✕</button>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:0;padding:12px 20px 0">
+      <div class="chart-tabs">
+        <button class="chart-tab active" id="tab-kline" onclick="switchChartTab('kline')">K线图</button>
+        <button class="chart-tab" id="tab-trend" onclick="switchChartTab('trend')">分时图</button>
+      </div>
+    </div>
+    <div class="chart-body">
+      <div class="chart-meta" id="chart-meta"></div>
+      <div class="chart-svg-wrap" id="chart-svg-wrap">
+        <div class="chart-loading"><div class="spinner"></div><div>加载中…</div></div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Floating Compare Bar -->
 <div id="compare-bar">
@@ -914,11 +966,13 @@ function renderNormalTable() {
     const trC  = trV>=5&&trV<=10   ? 'style="color:var(--gold)"'  : '';
     const globalIdx = (page-1)*PAGE_SIZE + i + 1;
     const inCmp = compareList.some(c=>c.code===s.code);
+    const inflowV = parseFloat(s.net_inflow)||0;
+    const inflowC = inflowV>0?'style="color:var(--red)"':inflowV<0?'style="color:var(--green)"':'style="color:var(--muted)"';
     return `<tr>
       <td><button class="star-btn ${starred?'starred':''}" data-code="${s.code}" data-name="${s.name}" onclick="toggleStar('${s.code}','${s.name}')">${starred?'★':'☆'}</button></td>
       <td><button class="cmp-btn ${inCmp?'in-compare':''}" onclick="toggleCompare(${JSON.stringify(s).replace(/"/g,'&quot;')})" title="加入对比">${inCmp?'✓比':'+ 比'}</button></td>
       <td style="color:var(--muted);font-size:11px">${globalIdx}</td>
-      <td><div class="stock-name">${s.name}${mkt}</div><div class="stock-code">${s.code}</div></td>
+      <td style="cursor:pointer" onclick="openChart('${s.code}','${s.name}',${s.price},${s.change_pct})"><div class="stock-name">${s.name}${mkt}</div><div class="stock-code">${s.code}</div></td>
       <td><span class="${pctCls}">${isLimitUp(s.change_pct)?'涨停 ':''}${fmt(s.change_pct)}%</span></td>
       <td class="${pc}">${fmt(s.price)}</td>
       <td class="${pc}">${parseFloat(s.change)>0?'+':''}${fmt(s.change)}</td>
@@ -930,6 +984,7 @@ function renderNormalTable() {
       <td class="down">${fmt(s.low)}</td>
       <td style="color:var(--muted)">${fmtAmp(s)}</td>
       <td style="color:var(--muted)">${fmtMoney(s.turnover)}</td>
+      <td ${inflowC}>${fmtMoney(s.net_inflow)}</td>
       <td style="color:var(--muted)">${fmt(s.pe)}</td>
     </tr>`;
   }).join('');
@@ -1105,6 +1160,158 @@ document.getElementById('notif-btn').addEventListener('click', ()=>{
   document.getElementById('notif-dot').style.display = 'none';
   openSettings();
   setTimeout(()=>document.getElementById('s-browser-notif').scrollIntoView({behavior:'smooth'}), 300);
+});
+
+/* ═══════════════════════════════════════════════════════
+   Chart Modal
+═══════════════════════════════════════════════════════ */
+let chartData = null, chartTab = 'kline';
+
+async function openChart(code, name, price, pct) {
+  chartData = null; chartTab = 'kline';
+  document.getElementById('chart-overlay').style.display = 'flex';
+  document.getElementById('chart-name').textContent = name;
+  document.getElementById('chart-code').textContent = code;
+  document.getElementById('chart-consecutive').innerHTML = '';
+  const priceEl = document.getElementById('chart-price');
+  const pctEl   = document.getElementById('chart-pct');
+  const pc = parseFloat(pct);
+  priceEl.textContent = parseFloat(price).toFixed(2);
+  priceEl.className = 'chart-price ' + (pc>0?'up':pc<0?'down':'flat');
+  pctEl.textContent  = (pc>0?'+':'')+pc.toFixed(2)+'%';
+  pctEl.className    = 'chart-pct change-pct ' + (pc>=9.9?'limit-up':pc>0?'up':pc<0?'down':'flat');
+  document.getElementById('chart-meta').innerHTML = '';
+  document.getElementById('chart-svg-wrap').innerHTML = '<div class="chart-loading"><div class="spinner"></div><div>加载中…</div></div>';
+  document.getElementById('tab-kline').classList.add('active');
+  document.getElementById('tab-trend').classList.remove('active');
+
+  try {
+    const res = await fetch(`/api/chart/${code}`);
+    chartData = await res.json();
+    if (chartData.consecutive >= 2) {
+      document.getElementById('chart-consecutive').innerHTML =
+        `<span class="consecutive-badge">${chartData.consecutive}连板</span>`;
+    }
+    renderChartMeta(code, price, pct);
+    renderKlineChart();
+  } catch(e) {
+    document.getElementById('chart-svg-wrap').innerHTML = `<div class="chart-loading" style="color:var(--red)">加载失败</div>`;
+  }
+}
+
+function switchChartTab(tab) {
+  chartTab = tab;
+  document.getElementById('tab-kline').classList.toggle('active', tab==='kline');
+  document.getElementById('tab-trend').classList.toggle('active', tab==='trend');
+  if (!chartData) return;
+  tab === 'kline' ? renderKlineChart() : renderTrendChart();
+}
+
+function renderChartMeta(code, price, pct) {
+  if (!chartData?.klines?.length) return;
+  const k = chartData.klines[chartData.klines.length - 1];
+  const amp = k.prev_close > 0 ? ((k.high-k.low)/k.prev_close*100).toFixed(2)+'%'
+            : k.close > 0 ? ((k.high-k.low)/k.close*100).toFixed(2)+'%' : '--';
+  document.getElementById('chart-meta').innerHTML = [
+    { l:'今开', v: k.open.toFixed(2) },
+    { l:'最高', v: k.high.toFixed(2), c:'up' },
+    { l:'最低', v: k.low.toFixed(2),  c:'down' },
+    { l:'成交量', v: fmtVol(k.volume) },
+    { l:'连板数', v: chartData.consecutive > 0 ? chartData.consecutive+'天' : '无' },
+  ].map(m=>`<div class="meta-item"><div class="ml">${m.l}</div><div class="mv ${m.c||''}">${m.v}</div></div>`).join('');
+}
+
+function renderKlineChart() {
+  const wrap = document.getElementById('chart-svg-wrap');
+  const klines = chartData?.klines;
+  if (!klines || klines.length < 2) { wrap.innerHTML='<div class="chart-loading">数据不足</div>'; return; }
+  const W=wrap.clientWidth||800, H=280, PL=50, PR=10, PT=10, PB=40, VH=55;
+  const cW=W-PL-PR, cH=H-PT-PB-VH-8;
+  const n=Math.min(klines.length,60), data=klines.slice(-n);
+  const prices=[...data.map(k=>k.high),...data.map(k=>k.low)];
+  const pMax=Math.max(...prices), pMin=Math.min(...prices);
+  const pRange=pMax-pMin||1;
+  const vols=data.map(k=>k.volume), vMax=Math.max(...vols)||1;
+  const py=v=>PT+cH-(v-pMin)/pRange*cH;
+  const bw=Math.max(2,(cW/n)*0.7), gap=cW/n;
+  let lines='', candles='', volumes='', xLabels='';
+  // grid
+  for(let i=0;i<=4;i++){
+    const y=PT+cH*i/4;
+    const price=pMax-pRange*i/4;
+    lines+=`<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="#2a2d3e" stroke-width="1"/>`;
+    lines+=`<text x="${PL-4}" y="${y+4}" text-anchor="end" fill="#7c8499" font-size="10">${price.toFixed(2)}</text>`;
+  }
+  data.forEach((k,i)=>{
+    const x=PL+i*gap+gap/2;
+    const isUp=k.close>=k.open;
+    const color=isUp?'#f04d4d':'#12b86e';
+    const top=py(Math.max(k.open,k.close)), bot=py(Math.min(k.open,k.close));
+    const bodyH=Math.max(1,bot-top);
+    candles+=`<line x1="${x}" y1="${py(k.high)}" x2="${x}" y2="${py(k.low)}" stroke="${color}" stroke-width="1"/>`;
+    candles+=`<rect x="${x-bw/2}" y="${top}" width="${bw}" height="${bodyH}" fill="${color}"/>`;
+    const vh=Math.max(1,(k.volume/vMax)*(VH-4));
+    const vy=H-PB-vh;
+    volumes+=`<rect x="${x-bw/2}" y="${vy}" width="${bw}" height="${vh}" fill="${isUp?'rgba(240,77,77,.5)':'rgba(18,184,110,.5)'}"/>`;
+    if(i%Math.ceil(n/6)===0){
+      xLabels+=`<text x="${x}" y="${H-PB+14}" text-anchor="middle" fill="#7c8499" font-size="9">${k.date.slice(5)}</text>`;
+    }
+  });
+  wrap.innerHTML=`<svg width="${W}" height="${H}" style="display:block">
+    ${lines}
+    <line x1="${PL}" y1="${H-PB-VH-4}" x2="${W-PR}" y2="${H-PB-VH-4}" stroke="#2a2d3e" stroke-width="1"/>
+    ${volumes}${candles}${xLabels}
+  </svg>`;
+}
+
+function renderTrendChart() {
+  const wrap = document.getElementById('chart-svg-wrap');
+  const trends = chartData?.trends;
+  if (!trends || trends.length < 5) {
+    wrap.innerHTML='<div class="chart-loading">分时数据不足（非交易时间）</div>'; return;
+  }
+  const pts = trends.map(t=>{const p=t.split(',');return{time:p[0].slice(-5),price:+p[2],avg:+p[7],vol:+p[5]};}).filter(p=>p.price>0&&p.avg>0);
+  if (pts.length<2){wrap.innerHTML='<div class="chart-loading">数据不足</div>';return;}
+  const W=wrap.clientWidth||800, H=260, PL=50, PR=10, PT=10, PB=30, VH=45;
+  const cW=W-PL-PR, cH=H-PT-PB-VH-8;
+  const n=pts.length;
+  const prices=[...pts.map(p=>p.price),...pts.map(p=>p.avg)];
+  const pMax=Math.max(...prices), pMin=Math.min(...prices);
+  const pRange=pMax-pMin||1;
+  const vols=pts.map(p=>p.vol), vMax=Math.max(...vols)||1;
+  const px=i=>PL+i*(cW/(n-1));
+  const py=v=>PT+cH-(v-pMin)/pRange*cH;
+  let grid='', priceLine='', avgLine='', volBars='', xLabels='';
+  for(let i=0;i<=4;i++){
+    const y=PT+cH*i/4;
+    grid+=`<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="#2a2d3e" stroke-width="1"/>`;
+    grid+=`<text x="${PL-4}" y="${y+4}" text-anchor="end" fill="#7c8499" font-size="10">${(pMax-pRange*i/4).toFixed(2)}</text>`;
+  }
+  pts.forEach((p,i)=>{
+    if(i>0){
+      priceLine+=`<line x1="${px(i-1)}" y1="${py(pts[i-1].price)}" x2="${px(i)}" y2="${py(p.price)}" stroke="#f04d4d" stroke-width="1.5"/>`;
+      avgLine  +=`<line x1="${px(i-1)}" y1="${py(pts[i-1].avg)}" x2="${px(i)}" y2="${py(p.avg)}" stroke="#f5a623" stroke-width="1" stroke-dasharray="3,2"/>`;
+    }
+    const vh=Math.max(1,(p.vol/vMax)*(VH-4));
+    const vy=H-PB-vh;
+    volBars+=`<rect x="${px(i)-1}" y="${vy}" width="2" height="${vh}" fill="rgba(78,142,247,.5)"/>`;
+    if(i%Math.ceil(n/6)===0) xLabels+=`<text x="${px(i)}" y="${H-PB+12}" text-anchor="middle" fill="#7c8499" font-size="9">${p.time}</text>`;
+  });
+  wrap.innerHTML=`<svg width="${W}" height="${H}" style="display:block">
+    ${grid}
+    <line x1="${PL}" y1="${H-PB-VH-4}" x2="${W-PR}" y2="${H-PB-VH-4}" stroke="#2a2d3e" stroke-width="1"/>
+    ${volBars}${priceLine}${avgLine}${xLabels}
+    <circle cx="${px(pts.length-1)}" cy="${py(pts[pts.length-1].price)}" r="3" fill="#f04d4d"/>
+    <text x="${W-PR-2}" y="${H-PB+12}" text-anchor="end" fill="#f5a623" font-size="9">均线</text>
+    <line x1="${W-PR-30}" y1="${H-PB+8}" x2="${W-PR-18}" y2="${H-PB+8}" stroke="#f5a623" stroke-width="1" stroke-dasharray="3,2"/>
+  </svg>`;
+}
+
+document.getElementById('chart-close').addEventListener('click', ()=>{
+  document.getElementById('chart-overlay').style.display = 'none';
+});
+document.getElementById('chart-overlay').addEventListener('click', e=>{
+  if(e.target===e.currentTarget) document.getElementById('chart-overlay').style.display='none';
 });
 
 /* ═══════════════════════════════════════════════════════
