@@ -3,3 +3,4 @@ node_modules/
 .env
 app.py
 requirements.txt
+screen_history.json

@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>A股涨幅榜系统</title>
+  <style>
+    :root {
+      --bg: #080b10;
+      --panel: rgba(18, 23, 32, .76);
+      --panel-strong: rgba(24, 31, 44, .9);
+      --border: rgba(255, 255, 255, .11);
+      --text: #f5f7fb;
+      --muted: #9aa4b2;
+      --red: #f04d4d;
+      --gold: #f5b84b;
+      --green: #14c784;
+      --blue: #5b8cff;
+      --shadow: 0 24px 70px rgba(0, 0, 0, .42);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      color: var(--text);
+      font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 18% 16%, rgba(240, 77, 77, .16), transparent 30%),
+        radial-gradient(circle at 84% 18%, rgba(245, 184, 75, .13), transparent 28%),
+        linear-gradient(135deg, #080b10 0%, #111722 48%, #090c12 100%);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, .045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, .035) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .8), transparent 76%);
+    }
+
+    .page {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      height: 68px;
+      padding: 0 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, .08);
+      backdrop-filter: blur(16px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 800;
+      letter-spacing: .04em;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, var(--red), var(--gold));
+      color: #10131a;
+      font-weight: 900;
+      box-shadow: 0 10px 28px rgba(240, 77, 77, .26);
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--green);
+      box-shadow: 0 0 0 6px rgba(20, 199, 132, .12);
+    }
+
+    .hero {
+      flex: 1;
+      width: min(1180px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 74px 0 42px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(330px, .92fr);
+      gap: 42px;
+      align-items: center;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      margin-bottom: 24px;
+      border: 1px solid rgba(245, 184, 75, .24);
+      border-radius: 999px;
+      background: rgba(245, 184, 75, .08);
+      color: #ffd27a;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    h1 {
+      max-width: 720px;
+      font-size: clamp(42px, 7vw, 82px);
+      line-height: 1.04;
+      letter-spacing: 0;
+      font-weight: 900;
+    }
+
+    .lead {
+      max-width: 640px;
+      margin-top: 24px;
+      color: #c6ceda;
+      font-size: 18px;
+      line-height: 1.8;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 34px;
+      flex-wrap: wrap;
+    }
+
+    .primary-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 52px;
+      padding: 0 26px;
+      border: 0;
+      border-radius: 8px;
+      color: #141820;
+      background: linear-gradient(135deg, #ff6464, #f5c85b);
+      box-shadow: 0 16px 42px rgba(240, 77, 77, .32);
+      font-size: 16px;
+      font-weight: 800;
+      text-decoration: none;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+
+    .primary-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 20px 54px rgba(240, 77, 77, .42);
+    }
+
+    .secondary-note {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .market-panel {
+      position: relative;
+      min-height: 470px;
+      padding: 22px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(25, 31, 43, .86), rgba(12, 16, 24, .86));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .market-panel::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(240, 77, 77, .12), transparent 42%, rgba(91, 140, 255, .1));
+      pointer-events: none;
+    }
+
+    .panel-head,
+    .ticker-row,
+    .chart,
+    .metrics {
+      position: relative;
+      z-index: 1;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+
+    .panel-title {
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .panel-tag {
+      padding: 5px 10px;
+      border-radius: 999px;
+      color: #ffd27a;
+      background: rgba(245, 184, 75, .1);
+      border: 1px solid rgba(245, 184, 75, .22);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .ticker-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, .08);
+    }
+
+    .stock-name {
+      color: #f7f8fb;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .stock-code {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .stock-change {
+      color: var(--red);
+      font-size: 18px;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chart {
+      height: 132px;
+      margin: 24px 0;
+      display: flex;
+      align-items: end;
+      gap: 8px;
+      padding: 14px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .045);
+      border: 1px solid rgba(255, 255, 255, .07);
+    }
+
+    .bar {
+      flex: 1;
+      min-width: 9px;
+      border-radius: 6px 6px 2px 2px;
+      background: linear-gradient(180deg, #ff7777, #d93636);
+      opacity: .88;
+      animation: rise .8s ease both;
+    }
+
+    .bar:nth-child(2n) {
+      background: linear-gradient(180deg, #f6c95f, #d49222);
+    }
+
+    @keyframes rise {
+      from { transform: scaleY(.25); transform-origin: bottom; opacity: .28; }
+      to { transform: scaleY(1); transform-origin: bottom; opacity: .88; }
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .metric {
+      padding: 14px;
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .045);
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 7px;
+    }
+
+    .metric-value {
+      font-size: 20px;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .features {
+      width: min(1180px, calc(100% - 48px));
+      margin: 0 auto 42px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+
+    .feature {
+      padding: 18px;
+      min-height: 118px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      backdrop-filter: blur(14px);
+    }
+
+    .feature-icon {
+      width: 34px;
+      height: 34px;
+      margin-bottom: 14px;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      color: #141820;
+      background: linear-gradient(135deg, #f45b5b, #f5bd53);
+      font-weight: 900;
+    }
+
+    .feature h2 {
+      font-size: 16px;
+      margin-bottom: 8px;
+    }
+
+    .feature p {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    @media (max-width: 920px) {
+      .topbar {
+        padding: 0 22px;
+      }
+
+      .hero {
+        grid-template-columns: 1fr;
+        padding-top: 42px;
+      }
+
+      .market-panel {
+        min-height: auto;
+      }
+
+      .features {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 560px) {
+      .status {
+        display: none;
+      }
+
+      .hero,
+      .features {
+        width: min(100% - 28px, 1180px);
+      }
+
+      h1 {
+        font-size: 42px;
+      }
+
+      .lead {
+        font-size: 16px;
+      }
+
+      .primary-btn {
+        width: 100%;
+      }
+
+      .features,
+      .metrics {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">A</div>
+        <span>A股涨幅榜系统</span>
+      </div>
+      <div class="status">
+        <span class="status-dot"></span>
+        <span>实时行情监控</span>
+      </div>
+    </header>
+
+    <main class="hero">
+      <section>
+        <div class="eyebrow">实时行情 · 智能选股 · 市场监控</div>
+        <h1>聚焦强势股，快速看清今日市场。</h1>
+        <p class="lead">
+          汇总A股涨幅排行、指数状态、量比、资金流向与盘中趋势，用一个清晰界面完成行情观察和选股判断。
+        </p>
+        <div class="actions">
+          <a class="primary-btn" href="/market" aria-label="进入实时行情">
+            进入实时行情
+            <span>→</span>
+          </a>
+          <span class="secondary-note">点击后进入原涨幅榜数据界面</span>
+        </div>
+      </section>
+
+      <aside class="market-panel" aria-label="行情预览">
+        <div class="panel-head">
+          <div class="panel-title">今日强势榜预览</div>
+          <div class="panel-tag">Live</div>
+        </div>
+
+        <div class="ticker-row">
+          <div>
+            <div class="stock-name">强势样本</div>
+            <div class="stock-code">涨幅 / 量比 / 资金</div>
+          </div>
+          <div class="stock-change">+9.96%</div>
+        </div>
+        <div class="ticker-row">
+          <div>
+            <div class="stock-name">板块热度</div>
+            <div class="stock-code">行业轮动跟踪</div>
+          </div>
+          <div class="stock-change">+6.28%</div>
+        </div>
+        <div class="ticker-row">
+          <div>
+            <div class="stock-name">主力净流入</div>
+            <div class="stock-code">资金方向观察</div>
+          </div>
+          <div class="stock-change">+3.42亿</div>
+        </div>
+
+        <div class="chart" aria-hidden="true">
+          <div class="bar" style="height:42%"></div>
+          <div class="bar" style="height:58%"></div>
+          <div class="bar" style="height:47%"></div>
+          <div class="bar" style="height:72%"></div>
+          <div class="bar" style="height:64%"></div>
+          <div class="bar" style="height:86%"></div>
+          <div class="bar" style="height:76%"></div>
+          <div class="bar" style="height:94%"></div>
+          <div class="bar" style="height:82%"></div>
+          <div class="bar" style="height:98%"></div>
+        </div>
+
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">筛选条件</div>
+            <div class="metric-value">多维</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">刷新方式</div>
+            <div class="metric-value">实时</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">记录追踪</div>
+            <div class="metric-value">历史</div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <section class="features" aria-label="核心功能">
+      <article class="feature">
+        <div class="feature-icon">1</div>
+        <h2>实时涨幅榜</h2>
+        <p>按涨幅、成交、换手等指标快速查看市场强势个股。</p>
+      </article>
+      <article class="feature">
+        <div class="feature-icon">2</div>
+        <h2>智能选股</h2>
+        <p>结合涨停历史、分时表现和资金数据做条件筛选。</p>
+      </article>
+      <article class="feature">
+        <div class="feature-icon">3</div>
+        <h2>指数监控</h2>
+        <p>同步观察主要指数状态，减少脱离大盘的误判。</p>
+      </article>
+      <article class="feature">
+        <div class="feature-icon">4</div>
+        <h2>历史记录</h2>
+        <p>保留选股结果，方便复盘和连续跟踪。</p>
+      </article>
+    </section>
+  </div>
+</body>
+</html>
