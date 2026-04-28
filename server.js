@@ -228,7 +228,61 @@ async function fetchChartKlines(code, klt, lmt) {
     if (klines.length) return klines;
   } catch {}
 
-  return fetchTencentKlines(code, klt, lmt);
+  const txKlines = await fetchTencentKlines(code, klt, lmt);
+  if (txKlines.length) return txKlines;
+
+  if ([5, 10, 15, 30, 60].includes(klt)) {
+    const trends = await fetchIntradayTrends(code).catch(() => []);
+    return aggregateTrendsToKlines(trends, klt);
+  }
+
+  return [];
+}
+
+function aggregateTrendsToKlines(trends, minutes) {
+  if (!Array.isArray(trends) || !trends.length) return [];
+  const buckets = new Map();
+  for (const row of trends) {
+    const p = String(row).split(',');
+    if (p.length < 6) continue;
+    const timeText = p[0];
+    const price = Number(p[2]);
+    const high = Number(p[3]);
+    const low = Number(p[4]);
+    const volume = Number(p[5]);
+    if (!Number.isFinite(price) || price <= 0) continue;
+    const m = timeText.match(/(\d{4}-\d{2}-\d{2})\s+(\d{2}):(\d{2})/);
+    if (!m) continue;
+    const total = Number(m[2]) * 60 + Number(m[3]);
+    const bucketTotal = Math.floor(total / minutes) * minutes;
+    const hh = String(Math.floor(bucketTotal / 60)).padStart(2, '0');
+    const mm = String(bucketTotal % 60).padStart(2, '0');
+    const key = `${m[1]} ${hh}:${mm}`;
+    const item = buckets.get(key);
+    if (!item) {
+      buckets.set(key, {
+        date: key,
+        open: price,
+        close: price,
+        high: Number.isFinite(high) && high > 0 ? high : price,
+        low: Number.isFinite(low) && low > 0 ? low : price,
+        volume: Number.isFinite(volume) ? volume : 0,
+        change_pct: 0,
+      });
+    } else {
+      item.close = price;
+      item.high = Math.max(item.high, Number.isFinite(high) && high > 0 ? high : price);
+      item.low = Math.min(item.low, Number.isFinite(low) && low > 0 ? low : price);
+      item.volume += Number.isFinite(volume) ? volume : 0;
+    }
+  }
+  const list = [...buckets.values()];
+  for (let i = 0; i < list.length; i++) {
+    const prev = i > 0 ? list[i - 1].close : list[i].open;
+    list[i].prev_close = prev;
+    list[i].change_pct = prev ? ((list[i].close - prev) / prev) * 100 : 0;
+  }
+  return list;
 }
 
 async function resolveStockQuery(q) {
