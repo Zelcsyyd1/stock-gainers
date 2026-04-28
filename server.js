@@ -48,6 +48,10 @@ function getSecId(code) {
   return code.startsWith('6') ? `1.${code}` : `0.${code}`;
 }
 
+function getTencentCode(code) {
+  return `${code.startsWith('6') ? 'sh' : 'sz'}${code}`;
+}
+
 const EM_HEADERS = {
   'Referer': 'https://www.eastmoney.com/',
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -163,13 +167,20 @@ async function fetchDailyKlines(code, lmt = 80) {
     if (klines.length) return klines;
   } catch {}
 
-  const txCode = `${code.startsWith('6') ? 'sh' : 'sz'}${code}`;
+  return fetchTencentKlines(code, 101, lmt);
+}
+
+async function fetchTencentKlines(code, klt = 101, lmt = 80) {
+  const txCode = getTencentCode(code);
+  const periodMap = { 101: 'day', 102: 'week', 103: 'month' };
+  const period = periodMap[klt];
+  if (!period) return [];
   const resp = await fetch(
-    `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${txCode},day,,,${lmt},qfq`,
+    `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${txCode},${period},,,${lmt},qfq`,
     { headers: { 'User-Agent': EM_HEADERS['User-Agent'] }, signal: AbortSignal.timeout(8000) }
   );
   const raw = await resp.json();
-  const rows = raw?.data?.[txCode]?.qfqday || raw?.data?.[txCode]?.day || [];
+  const rows = raw?.data?.[txCode]?.[`qfq${period}`] || raw?.data?.[txCode]?.[period] || [];
   return rows.map((p, i) => {
     const prevClose = i > 0 ? +rows[i - 1][2] : +p[1];
     const close = +p[2];
@@ -185,9 +196,39 @@ async function fetchDailyKlines(code, lmt = 80) {
       amplitude: prevClose ? ((+p[3] - +p[4]) / prevClose) * 100 : 0,
       change_pct: prevClose ? (change / prevClose) * 100 : 0,
       change,
+      prev_close: prevClose,
       turnover_rate: 0,
     };
   });
+}
+
+async function fetchChartKlines(code, klt, lmt) {
+  const secid = getSecId(code);
+  try {
+    const resp = await fetch(
+      `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}` +
+      `&fields1=f1,f2,f3,f4,f5&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61` +
+      `&klt=${klt}&fqt=0&end=20991231&lmt=${lmt}`,
+      { headers: EM_HEADERS, signal: AbortSignal.timeout(8000) }
+    );
+    const raw = await resp.json();
+    const klines = (raw?.data?.klines ?? []).map(k => {
+      const p = k.split(',');
+      return {
+        date: p[0],
+        open: +p[1],
+        close: +p[2],
+        high: +p[3],
+        low: +p[4],
+        volume: +p[5],
+        change_pct: +p[8],
+        prev_close: +p[2] - +p[9],
+      };
+    });
+    if (klines.length) return klines;
+  } catch {}
+
+  return fetchTencentKlines(code, klt, lmt);
 }
 
 async function resolveStockQuery(q) {
@@ -352,6 +393,34 @@ async function batchProcess(items, fn, concurrency = 5) {
   }
   return results;
 }
+
+app.get('/api/chart/:code', async (req, res) => {
+  const code = req.params.code;
+  const klt = parseInt(req.query.klt) || 101;
+  const lmt = klt <= 60 ? 240 : (klt === 102 ? 104 : 60);
+  const threshold = (code.startsWith('3') || code.startsWith('688')) ? 19.5 : 9.9;
+  try {
+    const [klines, trends] = await Promise.all([
+      fetchChartKlines(code, klt, lmt),
+      klt === 101 ? fetchIntradayTrends(code).catch(() => []) : Promise.resolve([]),
+    ]);
+    let consecutive = 0;
+    for (let i = klines.length - 1; i >= 0; i--) {
+      if (klines[i].change_pct >= threshold) consecutive++;
+      else break;
+    }
+    res.json({
+      success: klines.length > 0,
+      klines,
+      trends,
+      consecutive,
+      source: klines.length ? 'kline' : 'none',
+      error: klines.length ? null : '未获取到K线数据',
+    });
+  } catch (e) {
+    res.json({ success: false, error: e.message, klines: [], trends: [], consecutive: 0 });
+  }
+});
 
 function nowStr() {
   const bj = getBeijingDate();
