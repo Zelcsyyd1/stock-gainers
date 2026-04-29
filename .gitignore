@@ -4,3 +4,4 @@ node_modules/
 app.py
 requirements.txt
 screen_history.json
+users.json

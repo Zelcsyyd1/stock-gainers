@@ -1,13 +1,91 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+const { promisify } = require('util');
 
 const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 5000;
+const scryptAsync = promisify(crypto.scrypt);
 
 // ── 选股历史（持久化到文件）────────────────────────────────────────────
 const HISTORY_FILE = path.join(__dirname, 'screen_history.json');
+const USERS_FILE = path.join(__dirname, 'users.json');
+const sessions = new Map();
+
+function loadUsers() {
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+      return data && typeof data === 'object' && data.users ? data : { users: {} };
+    }
+  } catch {}
+  return { users: {} };
+}
+
+function saveUsers(data) {
+  try { fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2), 'utf8'); } catch {}
+}
+
+const userStore = loadUsers();
+
+function normalizeUsername(username) {
+  return String(username || '').trim().toLowerCase();
+}
+
+function publicUser(user) {
+  return user ? { username: user.username, created_at: user.created_at } : null;
+}
+
+function parseCookies(req) {
+  return String(req.headers.cookie || '').split(';').reduce((acc, item) => {
+    const idx = item.indexOf('=');
+    if (idx === -1) return acc;
+    acc[item.slice(0, idx).trim()] = decodeURIComponent(item.slice(idx + 1).trim());
+    return acc;
+  }, {});
+}
+
+async function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  const hash = await scryptAsync(password, salt, 64);
+  return `${salt}:${hash.toString('hex')}`;
+}
+
+async function verifyPassword(password, stored) {
+  const [salt, hashHex] = String(stored || '').split(':');
+  if (!salt || !hashHex) return false;
+  const candidate = await hashPassword(password, salt);
+  const a = Buffer.from(candidate.split(':')[1], 'hex');
+  const b = Buffer.from(hashHex, 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function setSessionCookie(req, res, sid) {
+  const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  res.setHeader('Set-Cookie', [
+    `sid=${encodeURIComponent(sid)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}${secure ? '; Secure' : ''}`,
+  ]);
+}
+
+function clearSessionCookie(res) {
+  res.setHeader('Set-Cookie', 'sid=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+}
+
+function currentUser(req) {
+  const sid = parseCookies(req).sid;
+  const username = sid ? sessions.get(sid) : null;
+  return username ? userStore.users[username] : null;
+}
+
+function requireUser(req, res) {
+  const user = currentUser(req);
+  if (!user) {
+    res.status(401).json({ success: false, error: '请先登录' });
+    return null;
+  }
+  return user;
+}
 
 function loadHistory() {
   try {
@@ -669,6 +747,80 @@ async function fetchIndices() {
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'templates', 'home.html')));
 app.get('/market', (req, res) => res.sendFile(path.join(__dirname, 'templates', 'index.html')));
+
+app.get('/api/auth/me', (req, res) => {
+  const user = currentUser(req);
+  res.json({ success: true, user: publicUser(user), profile: user?.profile || null });
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  const username = normalizeUsername(req.body.username);
+  const password = String(req.body.password || '');
+  if (!/^[a-z0-9_@.-]{3,32}$/.test(username)) {
+    return res.status(400).json({ success: false, error: '账号需为3-32位字母、数字或邮箱字符' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ success: false, error: '密码至少6位' });
+  }
+  if (userStore.users[username]) {
+    return res.status(409).json({ success: false, error: '账号已存在' });
+  }
+  userStore.users[username] = {
+    username,
+    password_hash: await hashPassword(password),
+    created_at: nowStr(),
+    profile: { watchlist: [], settings: null, near_limit_range: null, theme: null },
+  };
+  saveUsers(userStore);
+  const sid = crypto.randomBytes(32).toString('hex');
+  sessions.set(sid, username);
+  setSessionCookie(req, res, sid);
+  res.json({ success: true, user: publicUser(userStore.users[username]), profile: userStore.users[username].profile });
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const username = normalizeUsername(req.body.username);
+  const password = String(req.body.password || '');
+  const user = userStore.users[username];
+  if (!user || !(await verifyPassword(password, user.password_hash))) {
+    return res.status(401).json({ success: false, error: '账号或密码错误' });
+  }
+  const sid = crypto.randomBytes(32).toString('hex');
+  sessions.set(sid, username);
+  setSessionCookie(req, res, sid);
+  res.json({ success: true, user: publicUser(user), profile: user.profile || {} });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const sid = parseCookies(req).sid;
+  if (sid) sessions.delete(sid);
+  clearSessionCookie(res);
+  res.json({ success: true });
+});
+
+app.get('/api/profile', (req, res) => {
+  const user = requireUser(req, res);
+  if (!user) return;
+  res.json({ success: true, profile: user.profile || {} });
+});
+
+app.put('/api/profile', (req, res) => {
+  const user = requireUser(req, res);
+  if (!user) return;
+  const body = req.body || {};
+  const watchlist = Array.isArray(body.watchlist)
+    ? body.watchlist.slice(0, 200).filter(w => /^\d{6}$/.test(String(w.code || ''))).map(w => ({ code: String(w.code), name: String(w.name || '') }))
+    : user.profile?.watchlist || [];
+  user.profile = {
+    watchlist,
+    settings: body.settings && typeof body.settings === 'object' ? body.settings : user.profile?.settings || null,
+    near_limit_range: body.near_limit_range && typeof body.near_limit_range === 'object' ? body.near_limit_range : user.profile?.near_limit_range || null,
+    theme: typeof body.theme === 'string' ? body.theme : user.profile?.theme || null,
+    updated_at: nowStr(),
+  };
+  saveUsers(userStore);
+  res.json({ success: true, profile: user.profile });
+});
 
 app.get('/api/stocks', async (req, res) => {
   const board    = req.query.board || 'all';

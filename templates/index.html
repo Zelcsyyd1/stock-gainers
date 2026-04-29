@@ -192,13 +192,21 @@
     .btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
 
     /* ── History Modal ─────────────────────────────────────────────── */
-    #history-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:none;align-items:center;justify-content:center;}
+#history-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:none;align-items:center;justify-content:center;}
+#auth-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:none;align-items:center;justify-content:center;}
     #history-modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:min(700px,95vw);max-height:80vh;overflow:hidden;display:flex;flex-direction:column;}
     .modal-header{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
     .modal-header h3{font-size:16px;font-weight:700;}
     .modal-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:20px;padding:2px 6px;line-height:1;}
     .modal-close:hover{color:var(--text);}
     .modal-body{overflow-y:auto;padding:16px 20px;}
+    .auth-form{display:grid;gap:10px;}
+    .auth-form input{width:100%;padding:9px 10px;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:inherit;}
+    .auth-form input:focus{outline:none;border-color:var(--accent);}
+    .auth-actions{display:flex;gap:8px;align-items:center;}
+    .auth-actions button{flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:inherit;cursor:pointer;}
+    .auth-actions button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;}
+    .auth-msg{min-height:18px;color:var(--muted);font-size:12px;}
     .history-item{background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;cursor:pointer;transition:border-color .2s;}
     .history-item:hover{border-color:var(--accent);}
     .history-item .hi-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
@@ -228,7 +236,10 @@
     .meta-item{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:12px;}
     .meta-item .ml{color:var(--muted);margin-bottom:2px;}
     .meta-item .mv{font-weight:600;}
-    .chart-svg-wrap{background:var(--bg);border-radius:8px;padding:8px;overflow:hidden;}
+    .chart-svg-wrap{position:relative;background:var(--bg);border-radius:8px;padding:8px;overflow:hidden;}
+    .chart-tooltip{position:absolute;z-index:5;display:none;min-width:150px;padding:8px 10px;border:1px solid rgba(148,163,184,.45);border-radius:8px;background:rgba(15,23,42,.92);color:#f8fafc;font-size:12px;line-height:1.55;box-shadow:0 12px 28px rgba(15,23,42,.24);pointer-events:none;backdrop-filter:blur(8px);}
+    .chart-tooltip .tt-date{font-weight:700;margin-bottom:3px;}
+    .chart-tooltip .tt-row{display:flex;justify-content:space-between;gap:14px;font-variant-numeric:tabular-nums;}
     .chart-loading{text-align:center;padding:60px;color:var(--muted);}
     .consecutive-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:var(--red);color:#fff;margin-left:6px;vertical-align:middle;}
 
@@ -924,6 +935,7 @@
       <span id="market-status-text">加载中…</span>
     </div>
     <div id="clock">--:--:--</div>
+    <button class="icon-btn" id="auth-btn" style="min-height:34px">登录</button>
     <!-- 历史记录 -->
     <div class="hdr-icon" id="history-btn" title="历史选股记录">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -967,7 +979,7 @@
     </div>
     <div class="controls-right">
       <label id="auto-label">
-        <input type="checkbox" id="auto-refresh" checked/>
+        <input type="checkbox" id="auto-refresh"/>
         自动刷新&nbsp;<span id="countdown"></span>
       </label>
       <button class="icon-btn" id="export-btn">
@@ -1302,6 +1314,27 @@
   </div>
 </div>
 
+<!-- Auth Modal -->
+<div id="auth-overlay" style="display:none">
+  <div id="auth-modal" style="width:min(420px,95vw);background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+    <div class="modal-header">
+      <h3>账号登录</h3>
+      <button class="modal-close" id="auth-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="auth-form">
+        <input id="auth-username" type="text" placeholder="账号 / 邮箱" autocomplete="username"/>
+        <input id="auth-password" type="password" placeholder="密码（至少6位）" autocomplete="current-password"/>
+        <div class="auth-actions">
+          <button class="primary" id="auth-login">登录</button>
+          <button id="auth-register">注册</button>
+        </div>
+        <div class="auth-msg" id="auth-msg">登录后会同步自选股和筛选设置。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ═══════════════════════════════════════════════════════
    State
@@ -1312,6 +1345,7 @@ let autoInterval = null, countdown = 30;
 let sortCol = 'change_pct', sortDir = 'desc';
 let isScreenMode = false, isWatchlistMode = false;
 let autoScreenDone = false; // 防止同一天重复自动选股
+let currentUser = null;
 const FETCH_SIZE = 300;   // 后端每次拉取总数
 const PAGE_SIZE  = 50;    // 每页显示数
 
@@ -1322,13 +1356,14 @@ let settings = { ...DEFAULT_SETTINGS };
 /* ═══════════════════════════════════════════════════════
    Init
 ═══════════════════════════════════════════════════════ */
-function init() {
+async function init() {
   loadSettings();
   loadWatchlist();
+  await initAuth();
   applySettingsToUI();
   fetchData();
   fetchIndices();
-  startAuto();
+  if (document.getElementById('auto-refresh').checked) startAuto();
   startClockAndAutoScreenCheck();
 }
 
@@ -1399,6 +1434,7 @@ function saveSettings() {
   settings.auto_screen   = document.getElementById('s-auto-screen').checked;
   settings.webhook       = document.getElementById('s-webhook').value.trim();
   localStorage.setItem('screenSettings', JSON.stringify(settings));
+  syncProfileToCloud();
 
   if (settings.browser_notif && Notification.permission === 'default') {
     Notification.requestPermission();
@@ -1421,6 +1457,7 @@ function resetSettings() {
   settings = { ...DEFAULT_SETTINGS };
   applySettingsToUI();
   localStorage.removeItem('screenSettings');
+  syncProfileToCloud();
   showToast('已恢复默认');
 }
 function openSettings() {
@@ -1433,13 +1470,137 @@ function closeSettings() {
   document.getElementById('settings-overlay').style.display = 'none';
 }
 
+/* Account */
+function profilePayload() {
+  return {
+    watchlist,
+    settings,
+    near_limit_range: typeof nearLimitRange !== 'undefined' ? nearLimitRange : null,
+    theme: localStorage.getItem('theme') || (typeof currentTheme !== 'undefined' ? currentTheme : null),
+  };
+}
+
+function hasProfileData(profile) {
+  return !!(profile && (
+    (Array.isArray(profile.watchlist) && profile.watchlist.length) ||
+    profile.settings ||
+    profile.near_limit_range ||
+    profile.theme
+  ));
+}
+
+function applyProfile(profile) {
+  if (!profile) return;
+  if (Array.isArray(profile.watchlist)) {
+    watchlist = profile.watchlist;
+    localStorage.setItem('watchlist', JSON.stringify(watchlist));
+  }
+  if (profile.settings) {
+    settings = { ...DEFAULT_SETTINGS, ...profile.settings };
+    localStorage.setItem('screenSettings', JSON.stringify(settings));
+  }
+  if (profile.near_limit_range && typeof nearLimitRange !== 'undefined') {
+    nearLimitRange = profile.near_limit_range;
+    localStorage.setItem(NEAR_LIMIT_RANGE_KEY, JSON.stringify(nearLimitRange));
+    if (typeof syncNearLimitInputs === 'function') syncNearLimitInputs();
+  }
+  if (profile.theme && typeof currentTheme !== 'undefined') {
+    currentTheme = profile.theme;
+    localStorage.setItem('theme', currentTheme);
+    if (typeof applyTheme === 'function') applyTheme(currentTheme);
+  }
+}
+
+let profileSyncTimer = null;
+function syncProfileToCloud(immediate = false) {
+  if (!currentUser) return;
+  clearTimeout(profileSyncTimer);
+  const run = async () => {
+    try {
+      await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profilePayload()),
+      });
+    } catch {}
+  };
+  if (immediate) run();
+  else profileSyncTimer = setTimeout(run, 300);
+}
+
+async function initAuth() {
+  try {
+    const res = await fetch('/api/auth/me');
+    const json = await res.json();
+    if (json.success && json.user) {
+      currentUser = json.user;
+      if (hasProfileData(json.profile)) applyProfile(json.profile);
+      else syncProfileToCloud(true);
+    }
+  } catch {}
+  updateAuthUI();
+}
+
+function updateAuthUI() {
+  const btn = document.getElementById('auth-btn');
+  btn.textContent = currentUser ? currentUser.username : '登录';
+  btn.title = currentUser ? '点击退出登录' : '登录或注册账号';
+}
+
+function openAuth() {
+  document.getElementById('auth-overlay').style.display = 'flex';
+  document.getElementById('auth-msg').textContent = '登录后会同步自选股和筛选设置。';
+  setTimeout(() => document.getElementById('auth-username').focus(), 50);
+}
+
+function closeAuth() {
+  document.getElementById('auth-overlay').style.display = 'none';
+}
+
+async function submitAuth(mode) {
+  const username = document.getElementById('auth-username').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const msg = document.getElementById('auth-msg');
+  msg.textContent = mode === 'register' ? '注册中...' : '登录中...';
+  try {
+    const res = await fetch(`/api/auth/${mode}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || '操作失败');
+    currentUser = json.user;
+    if (hasProfileData(json.profile)) applyProfile(json.profile);
+    else syncProfileToCloud(true);
+    applySettingsToUI();
+    renderStarButtons();
+    updateAuthUI();
+    closeAuth();
+    showToast(mode === 'register' ? '注册并登录成功' : '登录成功');
+    if (isWatchlistMode) fetchWatchlist();
+  } catch(e) {
+    msg.textContent = e.message;
+  }
+}
+
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  currentUser = null;
+  updateAuthUI();
+  showToast('已退出登录');
+}
+
 /* ═══════════════════════════════════════════════════════
    Watchlist
 ═══════════════════════════════════════════════════════ */
 function loadWatchlist() {
   try { watchlist = JSON.parse(localStorage.getItem('watchlist')) || []; } catch { watchlist = []; }
 }
-function saveWatchlist() { localStorage.setItem('watchlist', JSON.stringify(watchlist)); }
+function saveWatchlist() {
+  localStorage.setItem('watchlist', JSON.stringify(watchlist));
+  syncProfileToCloud();
+}
 function isStarred(code) { return watchlist.some(w => w.code === code); }
 function toggleStar(code, name) {
   if (isStarred(code)) {
@@ -1582,7 +1743,7 @@ function exitScreenMode() {
   document.getElementById('screen-btn').innerHTML =
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:13px;height:13px"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> 2:30 选股`;
   showLoading();
-  startAuto();
+  if (document.getElementById('auto-refresh').checked) startAuto();
   fetchData();
 }
 
@@ -1947,7 +2108,7 @@ document.querySelectorAll('#board-tabs button').forEach(btn => {
     page = 1; sortCol = 'change_pct'; sortDir = 'desc';
     showLoading();
     fetchData();
-    startAuto();
+    if (document.getElementById('auto-refresh').checked) startAuto();
   });
 });
 
@@ -1990,6 +2151,18 @@ document.getElementById('notif-btn').addEventListener('click', ()=>{
   document.getElementById('notif-dot').style.display = 'none';
   openSettings();
   setTimeout(()=>document.getElementById('s-browser-notif').scrollIntoView({behavior:'smooth'}), 300);
+});
+document.getElementById('auth-btn').addEventListener('click', () => {
+  currentUser ? logout() : openAuth();
+});
+document.getElementById('auth-close').addEventListener('click', closeAuth);
+document.getElementById('auth-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeAuth();
+});
+document.getElementById('auth-login').addEventListener('click', () => submitAuth('login'));
+document.getElementById('auth-register').addEventListener('click', () => submitAuth('register'));
+document.getElementById('auth-password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitAuth('login');
 });
 
 /* ═══════════════════════════════════════════════════════
@@ -2133,7 +2306,50 @@ function renderKlineChart() {
     ${lines}
     <line x1="${PL}" y1="${H-PB-VH-4}" x2="${W-PR}" y2="${H-PB-VH-4}" stroke="#2a2d3e" stroke-width="1"/>
     ${volumes}${candles}${maLines}${xLabels}${legend}
-  </svg>`;
+    <line id="kline-hover-line" x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,3" style="display:none"/>
+  </svg>
+  <div class="chart-tooltip" id="kline-tooltip"></div>`;
+
+  const svg = wrap.querySelector('svg');
+  const tooltip = wrap.querySelector('#kline-tooltip');
+  const hoverLine = wrap.querySelector('#kline-hover-line');
+  const hideTooltip = () => {
+    tooltip.style.display = 'none';
+    hoverLine.style.display = 'none';
+  };
+  svg.addEventListener('mouseleave', hideTooltip);
+  svg.addEventListener('mousemove', e => {
+    const rect = svg.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    if (x < PL || x > W - PR) { hideTooltip(); return; }
+    const idx = Math.max(0, Math.min(data.length - 1, Math.floor((x - PL) / gap)));
+    const k = data[idx];
+    const cx = PL + idx * gap + gap / 2;
+    const pct = Number.isFinite(k.change_pct)
+      ? k.change_pct
+      : (k.prev_close ? ((k.close - k.prev_close) / k.prev_close) * 100 : 0);
+    const cls = pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
+    const sign = pct > 0 ? '+' : '';
+    hoverLine.setAttribute('x1', cx);
+    hoverLine.setAttribute('x2', cx);
+    hoverLine.style.display = '';
+    tooltip.innerHTML = `
+      <div class="tt-date">${k.date}</div>
+      <div class="tt-row"><span>涨跌幅</span><b class="${cls}">${sign}${pct.toFixed(2)}%</b></div>
+      <div class="tt-row"><span>开盘</span><b>${fmt(k.open)}</b></div>
+      <div class="tt-row"><span>最高</span><b class="up">${fmt(k.high)}</b></div>
+      <div class="tt-row"><span>最低</span><b class="down">${fmt(k.low)}</b></div>
+      <div class="tt-row"><span>收盘</span><b>${fmt(k.close)}</b></div>
+      <div class="tt-row"><span>成交量</span><b>${fmtVol(k.volume)}</b></div>`;
+    tooltip.style.display = 'block';
+    const tooltipW = tooltip.offsetWidth || 160;
+    const tooltipH = tooltip.offsetHeight || 130;
+    let left = cx + 18;
+    if (left + tooltipW > W - 8) left = cx - tooltipW - 18;
+    const top = Math.max(8, Math.min(H - tooltipH - 8, e.clientY - rect.top - tooltipH / 2));
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+  });
 }
 
 function renderTrendChart() {
@@ -2475,7 +2691,7 @@ function clearSearch() {
   document.getElementById('search-badge').style.display = 'none';
   page = 1;
   if (!isScreenMode) {
-    startAuto();
+    if (document.getElementById('auto-refresh').checked) startAuto();
     renderNormalTable();
     renderStats();
   }
@@ -2611,6 +2827,7 @@ function readNearLimitRange() {
   nearLimitRange = { min: +min.toFixed(1), max: +max.toFixed(1) };
   localStorage.setItem(NEAR_LIMIT_RANGE_KEY, JSON.stringify(nearLimitRange));
   syncNearLimitInputs();
+  syncProfileToCloud();
   return nearLimitRange;
 }
 
@@ -2811,6 +3028,7 @@ function applyTheme(key) {
   currentTheme = key;
   localStorage.setItem('theme', key);
   renderThemePicker();
+  syncProfileToCloud();
 }
 
 function renderThemePicker() {
