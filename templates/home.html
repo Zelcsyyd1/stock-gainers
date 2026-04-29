@@ -93,6 +93,32 @@
       font-size: 13px;
     }
 
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .auth-btn {
+      min-height: 36px;
+      padding: 0 15px;
+      border: 1px solid rgba(255, 255, 255, .14);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .055);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      transition: border-color .18s ease, background .18s ease, transform .18s ease;
+    }
+
+    .auth-btn:hover {
+      transform: translateY(-1px);
+      border-color: rgba(245, 184, 75, .45);
+      background: rgba(245, 184, 75, .1);
+    }
+
     .status-dot {
       width: 8px;
       height: 8px;
@@ -349,6 +375,111 @@
       line-height: 1.55;
     }
 
+    .auth-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(0, 0, 0, .62);
+      backdrop-filter: blur(8px);
+    }
+
+    .auth-modal {
+      width: min(420px, 100%);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(16, 21, 31, .96);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .auth-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 900;
+    }
+
+    .auth-close {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .auth-body {
+      display: grid;
+      gap: 11px;
+      padding: 18px 20px 20px;
+    }
+
+    .auth-body input {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .06);
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .auth-body input:focus {
+      outline: none;
+      border-color: rgba(245, 184, 75, .55);
+    }
+
+    .auth-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .auth-row button {
+      flex: 1;
+      min-height: 42px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .055);
+      color: var(--text);
+      font-weight: 800;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .auth-row button.primary {
+      border: 0;
+      color: #141820;
+      background: linear-gradient(135deg, #ff6464, #f5c85b);
+    }
+
+    .auth-msg {
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .account-panel {
+      display: none;
+      gap: 12px;
+    }
+
+    .account-name {
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, .055);
+      color: var(--text);
+      font-weight: 800;
+      word-break: break-all;
+    }
+
     @media (max-width: 920px) {
       .topbar {
         padding: 0 22px;
@@ -371,6 +502,10 @@
     @media (max-width: 560px) {
       .status {
         display: none;
+      }
+
+      .top-actions {
+        gap: 8px;
       }
 
       .hero,
@@ -404,9 +539,12 @@
         <div class="brand-mark">A</div>
         <span>A股涨幅榜系统</span>
       </div>
-      <div class="status">
-        <span class="status-dot"></span>
-        <span>实时行情监控</span>
+      <div class="top-actions">
+        <div class="status">
+          <span class="status-dot"></span>
+          <span>实时更新中</span>
+        </div>
+        <button class="auth-btn" id="auth-btn">&#30331;&#24405;</button>
       </div>
     </header>
 
@@ -418,11 +556,11 @@
           汇总A股涨幅排行、指数状态、量比、资金流向与盘中趋势，用一个清晰界面完成行情观察和选股判断。
         </p>
         <div class="actions">
-          <a class="primary-btn" href="/market" aria-label="进入实时行情">
+          <a class="primary-btn" id="enter-market-btn" href="/market" aria-label="进入实时行情">
             进入实时行情
             <span>→</span>
           </a>
-          <span class="secondary-note">点击后进入原涨幅榜数据界面</span>
+          <span class="secondary-note">登录后进入涨幅榜数据界面</span>
         </div>
       </section>
 
@@ -507,5 +645,171 @@
       </article>
     </section>
   </div>
+
+  <div class="auth-overlay" id="auth-overlay">
+    <div class="auth-modal">
+      <div class="auth-head">
+        <span id="auth-title">邮箱登录</span>
+        <button class="auth-close" id="auth-close">&times;</button>
+      </div>
+      <div class="auth-body">
+        <div class="auth-form" id="auth-form">
+        <input id="auth-username" type="email" placeholder="邮箱" autocomplete="email" />
+          <input id="auth-password" type="password" placeholder="密码（至少6位）" autocomplete="current-password" />
+          <div id="auth-code-row" style="display:none;gap:8px;align-items:center">
+            <input id="auth-code" type="text" placeholder="验证码" maxlength="6" style="flex:1" autocomplete="one-time-code"/>
+            <button id="auth-send-code" style="white-space:nowrap;min-width:90px;min-height:42px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.055);color:var(--text);font-weight:800;font-family:inherit;cursor:pointer">发送验证码</button>
+          </div>
+          <div class="auth-row">
+            <button class="primary" id="auth-login">登录</button>
+            <button id="auth-register">注册</button>
+          </div>
+          <div class="auth-msg" id="auth-msg">使用邮箱注册或登录，登录后进入行情页。</div>
+        </div>
+        <div class="account-panel" id="account-panel">
+          <div class="auth-msg">&#24403;&#21069;&#24050;&#30331;&#24405;</div>
+          <div class="account-name" id="account-name">--</div>
+          <div class="auth-row">
+            <button class="primary" id="auth-enter">&#36827;&#20837;&#34892;&#24773;</button>
+            <button id="auth-logout">&#36864;&#20986;&#30331;&#24405;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentUser = null;
+
+    async function initAuth() {
+      try {
+        const res = await fetch('/api/auth/me');
+        const json = await res.json();
+        if (json.success && json.user) currentUser = json.user;
+      } catch {}
+      updateAuthUI();
+    }
+
+    function updateAuthUI() {
+      const btn = document.getElementById('auth-btn');
+      btn.textContent = currentUser ? currentUser.username : '\u767b\u5f55';
+      btn.title = currentUser ? '\u67e5\u770b\u8d26\u53f7' : '\u767b\u5f55\u6216\u6ce8\u518c\u8d26\u53f7';
+    }
+
+    function openAuth() {
+      document.getElementById('auth-overlay').style.display = 'flex';
+      document.getElementById('auth-title').textContent = currentUser ? '账号状态' : '邮箱登录';
+      document.getElementById('auth-form').style.display = currentUser ? 'none' : 'grid';
+      document.getElementById('account-panel').style.display = currentUser ? 'grid' : 'none';
+      document.getElementById('auth-code-row').style.display = 'none';
+      if (currentUser) {
+        document.getElementById('account-name').textContent = currentUser.username;
+      } else {
+        document.getElementById('auth-msg').textContent = '使用邮箱注册或登录，登录后进入行情页。';
+        setTimeout(() => document.getElementById('auth-username').focus(), 50);
+      }
+    }
+
+    function closeAuth() {
+      document.getElementById('auth-overlay').style.display = 'none';
+    }
+
+    async function submitAuth(mode) {
+      const username = document.getElementById('auth-username').value.trim();
+      const password = document.getElementById('auth-password').value;
+      const code = document.getElementById('auth-code').value.trim();
+      const msg = document.getElementById('auth-msg');
+      if (mode === 'register' && !code) { msg.textContent = '请输入验证码'; return; }
+      msg.textContent = mode === 'register' ? '注册中...' : '登录中...';
+      const body = { username, password };
+      if (mode === 'register') body.code = code;
+      try {
+        const res = await fetch('/api/auth/' + mode, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error || '操作失败');
+        currentUser = json.user;
+        updateAuthUI();
+        closeAuth();
+        window.location.href = '/market';
+      } catch (e) {
+        msg.textContent = e.message;
+      }
+    }
+
+    async function logout() {
+      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+      currentUser = null;
+      updateAuthUI();
+    }
+
+    document.getElementById('auth-btn').addEventListener('click', () => {
+      openAuth();
+    });
+    document.getElementById('auth-close').addEventListener('click', closeAuth);
+    document.getElementById('auth-overlay').addEventListener('click', e => {
+      if (e.target === e.currentTarget) closeAuth();
+    });
+    document.getElementById('auth-login').addEventListener('click', () => {
+      document.getElementById('auth-code-row').style.display = 'none';
+      submitAuth('login');
+    });
+    document.getElementById('auth-register').addEventListener('click', () => {
+      const codeRow = document.getElementById('auth-code-row');
+      if (codeRow.style.display === 'none') {
+        codeRow.style.display = 'flex';
+        document.getElementById('auth-msg').textContent = '请先发送验证码到邮箱，再点击注册。';
+        return;
+      }
+      submitAuth('register');
+    });
+    document.getElementById('auth-send-code').addEventListener('click', async () => {
+      const email = document.getElementById('auth-username').value.trim();
+      const btn = document.getElementById('auth-send-code');
+      const msg = document.getElementById('auth-msg');
+      if (!email) { msg.textContent = '请输入邮箱'; return; }
+      btn.disabled = true;
+      msg.textContent = '发送中...';
+      try {
+        const res = await fetch('/api/auth/send-code', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error);
+        msg.textContent = '验证码已发送，请查收邮箱（5分钟有效）';
+        let sec = 60;
+        btn.textContent = sec + 's';
+        const timer = setInterval(() => {
+          if (--sec <= 0) { clearInterval(timer); btn.disabled = false; btn.textContent = '发送验证码'; }
+          else btn.textContent = sec + 's';
+        }, 1000);
+      } catch(e) {
+        msg.textContent = e.message;
+        btn.disabled = false;
+      }
+    });
+    document.getElementById('auth-enter').addEventListener('click', () => {
+      window.location.href = '/market';
+    });
+    document.getElementById('auth-logout').addEventListener('click', () => {
+      logout();
+      closeAuth();
+    });
+    document.getElementById('auth-password').addEventListener('keydown', e => {
+      if (e.key === 'Enter') submitAuth('login');
+    });
+    document.getElementById('enter-market-btn').addEventListener('click', e => {
+      if (!currentUser) {
+        e.preventDefault();
+        openAuth();
+      }
+    });
+
+    initAuth();
+  </script>
 </body>
 </html>

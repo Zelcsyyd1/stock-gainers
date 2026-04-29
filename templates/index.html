@@ -1318,18 +1318,22 @@
 <div id="auth-overlay" style="display:none">
   <div id="auth-modal" style="width:min(420px,95vw);background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
     <div class="modal-header">
-      <h3>账号登录</h3>
+      <h3>邮箱登录</h3>
       <button class="modal-close" id="auth-close">✕</button>
     </div>
     <div class="modal-body">
       <div class="auth-form">
-        <input id="auth-username" type="text" placeholder="账号 / 邮箱" autocomplete="username"/>
+        <input id="auth-username" type="email" placeholder="邮箱" autocomplete="email"/>
         <input id="auth-password" type="password" placeholder="密码（至少6位）" autocomplete="current-password"/>
+        <div id="auth-code-row" style="display:none;gap:8px;align-items:center">
+          <input id="auth-code" type="text" placeholder="验证码" maxlength="6" style="flex:1" autocomplete="one-time-code"/>
+          <button id="auth-send-code" style="white-space:nowrap;min-width:90px">发送验证码</button>
+        </div>
         <div class="auth-actions">
           <button class="primary" id="auth-login">登录</button>
           <button id="auth-register">注册</button>
         </div>
-        <div class="auth-msg" id="auth-msg">登录后会同步自选股和筛选设置。</div>
+        <div class="auth-msg" id="auth-msg">使用邮箱注册或登录，同步自选股和筛选设置。</div>
       </div>
     </div>
   </div>
@@ -1549,7 +1553,7 @@ function updateAuthUI() {
 
 function openAuth() {
   document.getElementById('auth-overlay').style.display = 'flex';
-  document.getElementById('auth-msg').textContent = '登录后会同步自选股和筛选设置。';
+  document.getElementById('auth-msg').textContent = '使用邮箱注册或登录，同步自选股和筛选设置。';
   setTimeout(() => document.getElementById('auth-username').focus(), 50);
 }
 
@@ -1560,13 +1564,17 @@ function closeAuth() {
 async function submitAuth(mode) {
   const username = document.getElementById('auth-username').value.trim();
   const password = document.getElementById('auth-password').value;
+  const code = document.getElementById('auth-code').value.trim();
   const msg = document.getElementById('auth-msg');
+  if (mode === 'register' && !code) { msg.textContent = '请输入验证码'; return; }
   msg.textContent = mode === 'register' ? '注册中...' : '登录中...';
+  const body = { username, password };
+  if (mode === 'register') body.code = code;
   try {
     const res = await fetch(`/api/auth/${mode}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify(body),
     });
     const json = await res.json();
     if (!json.success) throw new Error(json.error || '操作失败');
@@ -2159,8 +2167,45 @@ document.getElementById('auth-close').addEventListener('click', closeAuth);
 document.getElementById('auth-overlay').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeAuth();
 });
-document.getElementById('auth-login').addEventListener('click', () => submitAuth('login'));
-document.getElementById('auth-register').addEventListener('click', () => submitAuth('register'));
+document.getElementById('auth-login').addEventListener('click', () => {
+  document.getElementById('auth-code-row').style.display = 'none';
+  submitAuth('login');
+});
+document.getElementById('auth-register').addEventListener('click', () => {
+  const codeRow = document.getElementById('auth-code-row');
+  if (codeRow.style.display === 'none') {
+    codeRow.style.display = 'flex';
+    document.getElementById('auth-msg').textContent = '请先发送验证码到邮箱，再点击注册。';
+    return;
+  }
+  submitAuth('register');
+});
+document.getElementById('auth-send-code').addEventListener('click', async () => {
+  const email = document.getElementById('auth-username').value.trim();
+  const btn = document.getElementById('auth-send-code');
+  const msg = document.getElementById('auth-msg');
+  if (!email) { msg.textContent = '请输入邮箱'; return; }
+  btn.disabled = true;
+  msg.textContent = '发送中...';
+  try {
+    const res = await fetch('/api/auth/send-code', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error);
+    msg.textContent = '验证码已发送，请查收邮箱（5分钟有效）';
+    let sec = 60;
+    btn.textContent = sec + 's';
+    const timer = setInterval(() => {
+      if (--sec <= 0) { clearInterval(timer); btn.disabled = false; btn.textContent = '发送验证码'; }
+      else btn.textContent = sec + 's';
+    }, 1000);
+  } catch(e) {
+    msg.textContent = e.message;
+    btn.disabled = false;
+  }
+});
 document.getElementById('auth-password').addEventListener('keydown', e => {
   if (e.key === 'Enter') submitAuth('login');
 });

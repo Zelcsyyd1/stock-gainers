@@ -3,11 +3,21 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { promisify } = require('util');
+const nodemailer = require('nodemailer');
 
 const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 5000;
 const scryptAsync = promisify(crypto.scrypt);
+
+// ── 邮件验证码 ──────────────────────────────────────────────────────────
+const mailTransporter = nodemailer.createTransport({
+  host: 'smtp.qq.com',
+  port: 465,
+  secure: true,
+  auth: { user: '2681544657@qq.com', pass: 'orfqyjkbxvvgdjfe' },
+});
+const verifyCodes = new Map(); // email -> { code, expires }
 
 // ── 选股历史（持久化到文件）────────────────────────────────────────────
 const HISTORY_FILE = path.join(__dirname, 'screen_history.json');
@@ -30,8 +40,12 @@ function saveUsers(data) {
 
 const userStore = loadUsers();
 
-function normalizeUsername(username) {
-  return String(username || '').trim().toLowerCase();
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && email.length <= 120;
 }
 
 function publicUser(user) {
@@ -746,25 +760,62 @@ async function fetchIndices() {
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'templates', 'home.html')));
-app.get('/market', (req, res) => res.sendFile(path.join(__dirname, 'templates', 'index.html')));
+app.get('/market', (req, res) => {
+  if (!currentUser(req)) return res.redirect('/');
+  res.sendFile(path.join(__dirname, 'templates', 'index.html'));
+});
 
 app.get('/api/auth/me', (req, res) => {
   const user = currentUser(req);
   res.json({ success: true, user: publicUser(user), profile: user?.profile || null });
 });
 
+app.post('/api/auth/send-code', async (req, res) => {
+  const email = normalizeEmail(req.body.email);
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ success: false, error: '\u8BF7\u8F93\u5165\u6709\u6548\u7684\u90AE\u7BB1\u5730\u5740' });
+  }
+  if (userStore.users[email]) {
+    return res.status(409).json({ success: false, error: '\u8BE5\u90AE\u7BB1\u5DF2\u88AB\u6CE8\u518C' });
+  }
+  const existing = verifyCodes.get(email);
+  if (existing && Date.now() - existing.sent < 60000) {
+    return res.status(429).json({ success: false, error: '\u8BF7\u7A0D\u540E\u518D\u53D1\u9001' });
+  }
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  verifyCodes.set(email, { code, expires: Date.now() + 5 * 60000, sent: Date.now() });
+  try {
+    await mailTransporter.sendMail({
+      from: '"A\u80A1\u6DA8\u5E45\u699C" <2681544657@qq.com>',
+      to: email,
+      subject: '\u6CE8\u518C\u9A8C\u8BC1\u7801',
+      html: `<p>\u60A8\u7684\u9A8C\u8BC1\u7801\u662F\uFF1A<b style="font-size:24px;color:#e53e3e">${code}</b></p><p>5\u5206\u949F\u5185\u6709\u6548\uFF0C\u8BF7\u52FF\u6CC4\u9732\u3002</p>`,
+    });
+    res.json({ success: true });
+  } catch (e) {
+    verifyCodes.delete(email);
+    res.status(500).json({ success: false, error: '\u90AE\u4EF6\u53D1\u9001\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5' });
+  }
+});
+
 app.post('/api/auth/register', async (req, res) => {
-  const username = normalizeUsername(req.body.username);
+  const username = normalizeEmail(req.body.username);
   const password = String(req.body.password || '');
-  if (!/^[a-z0-9_@.-]{3,32}$/.test(username)) {
-    return res.status(400).json({ success: false, error: '账号需为3-32位字母、数字或邮箱字符' });
+  const code = String(req.body.code || '').trim();
+  if (!isValidEmail(username)) {
+    return res.status(400).json({ success: false, error: '\u8BF7\u8F93\u5165\u6709\u6548\u7684\u90AE\u7BB1\u5730\u5740' });
   }
   if (password.length < 6) {
-    return res.status(400).json({ success: false, error: '密码至少6位' });
+    return res.status(400).json({ success: false, error: '\u5BC6\u7801\u81F3\u5C116\u4F4D' });
+  }
+  const record = verifyCodes.get(username);
+  if (!record || record.code !== code || Date.now() > record.expires) {
+    return res.status(400).json({ success: false, error: '\u9A8C\u8BC1\u7801\u65E0\u6548\u6216\u5DF2\u8FC7\u671F' });
   }
   if (userStore.users[username]) {
-    return res.status(409).json({ success: false, error: '账号已存在' });
+    return res.status(409).json({ success: false, error: '\u8BE5\u90AE\u7BB1\u5DF2\u88AB\u6CE8\u518C' });
   }
+  verifyCodes.delete(username);
   userStore.users[username] = {
     username,
     password_hash: await hashPassword(password),
@@ -779,11 +830,11 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  const username = normalizeUsername(req.body.username);
+  const username = normalizeEmail(req.body.username);
   const password = String(req.body.password || '');
   const user = userStore.users[username];
   if (!user || !(await verifyPassword(password, user.password_hash))) {
-    return res.status(401).json({ success: false, error: '账号或密码错误' });
+    return res.status(401).json({ success: false, error: '\u90AE\u7BB1\u6216\u5BC6\u7801\u9519\u8BEF' });
   }
   const sid = crypto.randomBytes(32).toString('hex');
   sessions.set(sid, username);
