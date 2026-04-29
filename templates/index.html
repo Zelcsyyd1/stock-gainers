@@ -341,6 +341,10 @@
     .qf-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
     .qf-btn.qf-red.active{background:var(--red);border-color:var(--red);}
     .qf-btn.qf-gold.active{background:var(--gold);border-color:var(--gold);color:#000;}
+    .near-limit-control{display:flex;align-items:center;gap:5px;padding:3px 8px;border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--muted);font-size:12px;white-space:nowrap;}
+    .near-limit-control.active{border-color:var(--red);color:var(--red);background:rgba(240,77,77,.08);font-weight:600;}
+    .near-limit-control input{width:52px;height:24px;padding:2px 5px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:12px;text-align:center;font-family:inherit;}
+    .near-limit-control input:focus{outline:none;border-color:var(--accent);}
 
     /* Distribution bar */
     .dist-bar-wrap{margin-bottom:16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;}
@@ -988,14 +992,18 @@
     </div>
   </div>
 
-  <!-- 快速筛选 -->
+
   <div class="quick-filters" id="quick-filters">
     <button class="qf-btn qf-red" data-filter="limitup">涨停股</button>
-    <button class="qf-btn" data-filter="nearLimit">次新高 8-9.9%</button>
-    <button class="qf-btn qf-gold" data-filter="bigVR">量比 &gt; 3</button>
-    <button class="qf-btn" data-filter="smallCap">小市值 &lt; 50亿</button>
-    <button class="qf-btn" data-filter="inflow">主力净流入</button>
-    <button class="qf-btn" data-filter="clear" style="margin-left:auto;color:var(--muted)">清除筛选</button>
+    <span class="near-limit-control" id="near-limit-control">
+      <span>冲板区间</span>
+      <input id="near-limit-min" type="number" min="0" max="30" step="0.1" value="8"/>
+      <span>~</span>
+      <input id="near-limit-max" type="number" min="0" max="30" step="0.1" value="9.9"/>
+      <span>%</span>
+    </span>
+    <button class="qf-btn qf-red" data-filter="inflow">主力净流入</button>
+    <button class="qf-btn" data-filter="clear">清空筛选</button>
   </div>
 
   <div class="field-section">
@@ -1060,6 +1068,8 @@
     <div class="stat-card"><div class="label">最高涨幅</div><div class="value up" id="stat-max">--</div></div>
     <div class="stat-card"><div class="label">涨停数量</div><div class="value up" id="stat-limit">--</div></div>
     <div class="stat-card"><div class="label">平均涨幅</div><div class="value" id="stat-avg">--</div></div>
+    <div class="stat-card"><div class="label">成交额</div><div class="value" id="stat-turnover">--</div></div>
+    <div class="stat-card"><div class="label">主力净流入</div><div class="value" id="stat-inflow">--</div></div>
     <div class="stat-card"><div class="label">更新时间</div><div class="value" id="stat-time" style="font-size:13px;margin-top:4px;color:var(--muted)">--</div></div>
   </div>
 
@@ -1567,6 +1577,7 @@ function exitScreenMode() {
   screenCandidates = [];
   activeQuickFilter = null;
   document.querySelectorAll('.qf-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('near-limit-control')?.classList.remove('active');
   document.getElementById('screen-banner').style.display = 'none';
   document.getElementById('screen-btn').innerHTML =
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:13px;height:13px"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> 2:30 选股`;
@@ -1681,10 +1692,16 @@ function sortedData(data) {
   });
 }
 
+function currentListData() {
+  if (isScreenMode) return screenCandidates;
+  if (isSearchMode) return searchResults;
+  return getFilteredData();
+}
+
 function renderNormalTable() {
   document.getElementById('thead-normal').style.display = '';
   document.getElementById('thead-screen').style.display = 'none';
-  const baseData = isSearchMode ? searchResults : getFilteredData();
+  const baseData = currentListData();
   const sorted = sortedData(baseData);
   hideAll();
   if (!sorted.length) { showEmpty(isWatchlistMode ? '自选股为空，从涨幅榜点 ☆ 添加' : '暂无数据'); return; }
@@ -1780,15 +1797,23 @@ function renderScreenTable(candidates) {
 }
 
 function renderStats() {
-  const data = isScreenMode ? screenCandidates : (isSearchMode ? searchResults : getFilteredData());
+  const data = currentListData();
   const valid = data.filter(s=>!isNaN(parseFloat(s.change_pct)));
   document.getElementById('stat-total').textContent = isScreenMode ? `${screenCandidates.filter(s=>s.pass).length}/${screenCandidates.length}` : valid.length;
-  if (!valid.length) { document.getElementById('dist-bar-wrap').style.display='none'; return; }
+  if (!valid.length) {
+    document.getElementById('dist-bar-wrap').style.display='none';
+    document.getElementById('stat-turnover').textContent = '--';
+    document.getElementById('stat-inflow').textContent = '--';
+    document.getElementById('stat-inflow').className = 'value';
+    return;
+  }
   const maxPct  = Math.max(...valid.map(s=>parseFloat(s.change_pct)||0));
   const limits  = valid.filter(s=>parseFloat(s.change_pct)>=9.9).length;
   const upCount = valid.filter(s=>parseFloat(s.change_pct)>0).length;
   const dnCount = valid.filter(s=>parseFloat(s.change_pct)<0).length;
   const avg = valid.reduce((a,s)=>a+(parseFloat(s.change_pct)||0),0)/valid.length;
+  const turnover = valid.reduce((a,s)=>a+(parseFloat(s.turnover)||0),0);
+  const netInflow = valid.reduce((a,s)=>a+(parseFloat(s.net_inflow)||0),0);
   document.getElementById('stat-max').textContent = maxPct.toFixed(2)+'%';
   document.getElementById('stat-limit').textContent = limits;
   const ratioEl = document.getElementById('stat-ratio');
@@ -1797,6 +1822,10 @@ function renderStats() {
   const el = document.getElementById('stat-avg');
   el.textContent = (avg>=0?'+':'')+avg.toFixed(2)+'%';
   el.className = 'value '+(avg>0?'up':avg<0?'down':'flat');
+  document.getElementById('stat-turnover').textContent = fmtMoney(turnover);
+  const inflowEl = document.getElementById('stat-inflow');
+  inflowEl.textContent = fmtBigMoney(netInflow);
+  inflowEl.className = 'value '+(netInflow>0?'up':netInflow<0?'down':'flat');
 
   // 涨幅分布条
   if (!isScreenMode) {
@@ -1892,6 +1921,7 @@ document.querySelectorAll('#board-tabs button').forEach(btn => {
     const b = btn.dataset.board;
     activeQuickFilter = null;
     document.querySelectorAll('.qf-btn').forEach(qb => qb.classList.remove('active'));
+    document.getElementById('near-limit-control')?.classList.remove('active');
 
     if (b === 'limitup') {
       stopAuto();
@@ -2552,14 +2582,61 @@ indicatorInput.addEventListener('keydown', e => {
    Quick Filters
 ═══════════════════════════════════════════════════════ */
 let activeQuickFilter = null;
+const NEAR_LIMIT_RANGE_KEY = 'nearLimitRange';
+let nearLimitRange = loadNearLimitRange();
+
+function loadNearLimitRange() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(NEAR_LIMIT_RANGE_KEY));
+    if (Number.isFinite(saved?.min) && Number.isFinite(saved?.max) && saved.min < saved.max) return saved;
+  } catch {}
+  return { min: 8, max: 9.9 };
+}
+
+function syncNearLimitInputs() {
+  document.getElementById('near-limit-min').value = nearLimitRange.min;
+  document.getElementById('near-limit-max').value = nearLimitRange.max;
+}
+
+function readNearLimitRange() {
+  const minInput = document.getElementById('near-limit-min');
+  const maxInput = document.getElementById('near-limit-max');
+  let min = parseFloat(minInput.value);
+  let max = parseFloat(maxInput.value);
+  if (!Number.isFinite(min)) min = 8;
+  if (!Number.isFinite(max)) max = 9.9;
+  min = Math.max(0, Math.min(30, min));
+  max = Math.max(0, Math.min(30, max));
+  if (min >= max) max = Math.min(30, min + 0.1);
+  nearLimitRange = { min: +min.toFixed(1), max: +max.toFixed(1) };
+  localStorage.setItem(NEAR_LIMIT_RANGE_KEY, JSON.stringify(nearLimitRange));
+  syncNearLimitInputs();
+  return nearLimitRange;
+}
 
 const QUICK_FILTERS = {
   limitup:  s => parseFloat(s.change_pct) >= 9.9,
-  nearLimit:s => { const v=parseFloat(s.change_pct); return v >= 8 && v < 9.9; },
-  bigVR:    s => parseFloat(s.volume_ratio) >= 3,
-  smallCap: s => parseFloat(s.market_cap) > 0 && parseFloat(s.market_cap) < 50e8,
+  nearLimit:s => { const v=parseFloat(s.change_pct); const r=nearLimitRange; return v >= r.min && v < r.max; },
   inflow:   s => parseFloat(s.net_inflow) > 0,
 };
+
+syncNearLimitInputs();
+function activateNearLimitFilter() {
+  activeQuickFilter = 'nearLimit';
+  document.querySelectorAll('.qf-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('near-limit-control').classList.add('active');
+  page = 1;
+  renderNormalTable();
+  renderStats();
+}
+document.getElementById('near-limit-min').addEventListener('input', () => {
+  readNearLimitRange();
+  activateNearLimitFilter();
+});
+document.getElementById('near-limit-max').addEventListener('input', () => {
+  readNearLimitRange();
+  activateNearLimitFilter();
+});
 
 document.getElementById('quick-filters').addEventListener('click', e => {
   const btn = e.target.closest('.qf-btn');
@@ -2568,12 +2645,16 @@ document.getElementById('quick-filters').addEventListener('click', e => {
   if (filter === 'clear' || filter === activeQuickFilter) {
     activeQuickFilter = null;
     document.querySelectorAll('.qf-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('near-limit-control').classList.remove('active');
+    page = 1;
     renderNormalTable(); renderStats();
     return;
   }
   activeQuickFilter = filter;
   document.querySelectorAll('.qf-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('near-limit-control').classList.remove('active');
   btn.classList.add('active');
+  page = 1;
   renderNormalTable(); renderStats();
 });
 
@@ -2644,7 +2725,7 @@ function exitLimitupMode() {
    CSV Export
 ═══════════════════════════════════════════════════════ */
 document.getElementById('export-btn').addEventListener('click', ()=>{
-  const data = isScreenMode ? screenCandidates : sortedData(allData);
+  const data = isScreenMode ? screenCandidates : sortedData(currentListData());
   if (!data.length) return;
   const headers = isScreenMode
     ? ['序号','代码','名称','市场','涨跌幅%','现价','量比','换手率%','市值(亿)','30日涨停','通过','原因']

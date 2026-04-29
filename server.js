@@ -26,9 +26,7 @@ function saveHistory(history) {
 const screenHistory = loadHistory();
 
 function getBeijingDate() {
-  const now = new Date();
-  const offset = 8 * 60;
-  return new Date(now.getTime() + (offset - now.getTimezoneOffset()) * 60000);
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
 }
 
 function getMarketStatus() {
@@ -65,7 +63,17 @@ const FS_MAP = {
   star:     'm:1+t:23',   // 科创板 688
 };
 
-async function fetchTopGainers(page = 1, pageSize = 50, board = 'all') {
+// 新浪财经板块映射
+const SINA_NODE_MAP = {
+  all:      'hs_a',
+  shanghai: 'sh_a',
+  shenzhen: 'sz_a',
+  chinext:  'cyb',
+  star:     'kcb',
+};
+
+// ── 数据源1: 东方财富 ──────────────────────────────────────────────
+async function fetchTopGainers_eastmoney(page = 1, pageSize = 50, board = 'all') {
   const fs = FS_MAP[board] || FS_MAP.all;
   const params = new URLSearchParams({
     pn: page, pz: pageSize, po: 1, np: 1,
@@ -96,10 +104,117 @@ async function fetchTopGainers(page = 1, pageSize = 50, board = 'all') {
       open:          item.f17 ?? 0,
       prev_close:    item.f18 ?? 0,
       market_cap:    item.f20 ?? 0,
-      net_inflow:    item.f62  ?? 0,   // 主力净流入（元）
-      inflow_pct:    item.f184 ?? 0,   // 主力净流入占比（%）
+      net_inflow:    item.f62  ?? 0,
+      inflow_pct:    item.f184 ?? 0,
       market:        item.f13 === 1 ? 'SH' : 'SZ',
     }));
+}
+
+// ── 数据源2: 新浪财经 ──────────────────────────────────────────────
+async function fetchTopGainers_sina(page = 1, pageSize = 50, board = 'all') {
+  const node = SINA_NODE_MAP[board] || SINA_NODE_MAP.all;
+  const resp = await fetch(
+    `https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData` +
+    `?page=${page}&num=${pageSize}&sort=changepercent&asc=0&node=${node}&symbol=&_s_r_a=init`,
+    { headers: { 'Referer': 'https://finance.sina.com.cn/', 'User-Agent': EM_HEADERS['User-Agent'] }, signal: AbortSignal.timeout(10000) }
+  );
+  const text = await resp.text();
+  const data = JSON.parse(text);
+  if (!Array.isArray(data)) return [];
+  return data
+    .filter(item => item.changepercent !== undefined)
+    .map(item => ({
+      code:          item.code ?? item.symbol?.replace(/^s[hz]/, '') ?? '',
+      name:          item.name ?? '',
+      price:         parseFloat(item.trade) || 0,
+      change_pct:    parseFloat(item.changepercent) || 0,
+      change:        parseFloat(item.pricechange) || 0,
+      volume:        parseFloat(item.volume) || 0,
+      turnover:      parseFloat(item.amount) || 0,
+      turnover_rate: parseFloat(item.turnoverratio) || 0,
+      pe:            parseFloat(item.per) || 0,
+      volume_ratio:  0,
+      high:          parseFloat(item.high) || 0,
+      low:           parseFloat(item.low) || 0,
+      open:          parseFloat(item.open) || 0,
+      prev_close:    parseFloat(item.settlement) || 0,
+      market_cap:    parseFloat(item.mktcap) || 0,
+      net_inflow:    0,
+      inflow_pct:    0,
+      market:        (item.code ?? '').startsWith('6') ? 'SH' : 'SZ',
+    }));
+}
+
+// ── 数据源3: 腾讯财经 ──────────────────────────────────────────────
+async function fetchTopGainers_tencent(page = 1, pageSize = 50, board = 'all') {
+  // 腾讯排行接口：market 参数 sh=沪市 sz=深市 ""=全部
+  const marketMap = { all: '', shanghai: 'sh', shenzhen: 'sz', chinext: 'sz', star: 'sh' };
+  const market = marketMap[board] ?? '';
+  const offset = (page - 1) * pageSize;
+  const resp = await fetch(
+    `https://proxy.finance.qq.com/ifzqgtimg/appstock/app/JsonRankInfo/getStockRankInfo` +
+    `?market=${market}&type=pctChg&asc=0&start=${offset}&num=${pageSize}`,
+    { headers: { 'Referer': 'https://stockapp.finance.qq.com/', 'User-Agent': EM_HEADERS['User-Agent'] }, signal: AbortSignal.timeout(10000) }
+  );
+  const raw = await resp.json();
+  const list = raw?.data?.rank_data ?? [];
+  return list
+    .map(line => {
+      // 格式: code,name,price,change,change_pct,volume,turnover,...
+      const p = String(line).split('~');
+      if (p.length < 10) return null;
+      const code = p[2] ?? '';
+      // 创业板/科创板过滤
+      if (board === 'chinext' && !code.startsWith('3')) return null;
+      if (board === 'star' && !code.startsWith('688')) return null;
+      return {
+        code,
+        name:          p[1] ?? '',
+        price:         parseFloat(p[3]) || 0,
+        change_pct:    parseFloat(p[5]) || 0,
+        change:        parseFloat(p[4]) || 0,
+        volume:        parseFloat(p[6]) || 0,
+        turnover:      parseFloat(p[7]) || 0,
+        turnover_rate: parseFloat(p[9]) || 0,
+        pe:            parseFloat(p[39]) || 0,
+        volume_ratio:  0,
+        high:          parseFloat(p[33]) || 0,
+        low:           parseFloat(p[34]) || 0,
+        open:          parseFloat(p[32]) || 0,
+        prev_close:    parseFloat(p[4]) ? (parseFloat(p[3]) || 0) - (parseFloat(p[4]) || 0) : 0,
+        market_cap:    parseFloat(p[45]) || 0,
+        net_inflow:    0,
+        inflow_pct:    0,
+        market:        code.startsWith('6') ? 'SH' : 'SZ',
+      };
+    })
+    .filter(Boolean);
+}
+
+// ── 自动切换：依次尝试 东方财富 → 新浪 → 腾讯 ──────────────────────
+let lastDataSource = '东方财富';
+
+async function fetchTopGainers(page = 1, pageSize = 50, board = 'all') {
+  const sources = [
+    { name: '东方财富', fn: fetchTopGainers_eastmoney },
+    { name: '新浪财经', fn: fetchTopGainers_sina },
+    { name: '腾讯财经', fn: fetchTopGainers_tencent },
+  ];
+  for (const src of sources) {
+    try {
+      const data = await src.fn(page, pageSize, board);
+      if (data && data.length > 0) {
+        if (lastDataSource !== src.name) {
+          console.log(`📡 数据源切换: ${lastDataSource} → ${src.name}`);
+          lastDataSource = src.name;
+        }
+        return data;
+      }
+    } catch (e) {
+      console.log(`⚠️ ${src.name}请求失败: ${e.message}`);
+    }
+  }
+  return [];
 }
 
 // 批量获取自选股行情
@@ -576,7 +691,7 @@ app.get('/api/stocks', async (req, res) => {
       }).slice(0, pageSize);
     }
     const { open, status } = getMarketStatus();
-    res.json({ success: true, data, market_open: open, market_status: status, time: nowStr(), total: data.length });
+    res.json({ success: true, data, market_open: open, market_status: status, time: nowStr(), total: data.length, source: lastDataSource });
   } catch (e) {
     res.json({ success: false, error: e.message, data: [] });
   }
