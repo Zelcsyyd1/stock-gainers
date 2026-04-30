@@ -6,17 +6,22 @@
   <title>A股涨幅榜系统</title>
   <style>
     :root {
-      --bg: #080b10;
-      --panel: rgba(18, 23, 32, .76);
-      --panel-strong: rgba(24, 31, 44, .9);
-      --border: rgba(255, 255, 255, .11);
-      --text: #f5f7fb;
-      --muted: #9aa4b2;
-      --red: #f04d4d;
-      --gold: #f5b84b;
-      --green: #14c784;
-      --blue: #5b8cff;
-      --shadow: 0 24px 70px rgba(0, 0, 0, .42);
+      --bg: #edf2f7;
+      --surface: #ffffff;
+      --surface-2: #f8fafc;
+      --line: #d7dee8;
+      --line-strong: #bdc7d5;
+      --text: #111827;
+      --muted: #5f6f83;
+      --soft: #eef4fb;
+      --red: #dc2626;
+      --red-soft: #fff1f1;
+      --green: #0f9f6e;
+      --green-soft: #ecfdf5;
+      --blue: #1d4ed8;
+      --blue-soft: #eaf1ff;
+      --gold: #b7791f;
+      --shadow: 0 18px 44px rgba(31, 41, 55, .08);
     }
 
     * {
@@ -29,344 +34,405 @@
       min-height: 100vh;
       color: var(--text);
       font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at 18% 16%, rgba(240, 77, 77, .16), transparent 30%),
-        radial-gradient(circle at 84% 18%, rgba(245, 184, 75, .13), transparent 28%),
-        linear-gradient(135deg, #080b10 0%, #111722 48%, #090c12 100%);
-      overflow-x: hidden;
+      background: var(--bg);
     }
 
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      background-image:
-        linear-gradient(rgba(255, 255, 255, .045) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, .035) 1px, transparent 1px);
-      background-size: 48px 48px;
-      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, .8), transparent 76%);
+    a {
+      color: inherit;
+      text-decoration: none;
     }
 
-    .page {
-      position: relative;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
+    button,
+    input {
+      font: inherit;
     }
 
     .topbar {
-      height: 68px;
-      padding: 0 42px;
+      height: 60px;
+      padding: 0 28px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 1px solid rgba(255, 255, 255, .08);
-      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .92);
+      backdrop-filter: blur(14px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
     }
 
     .brand {
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       font-weight: 800;
-      letter-spacing: .04em;
     }
 
     .brand-mark {
-      width: 34px;
-      height: 34px;
-      border-radius: 10px;
+      width: 30px;
+      height: 30px;
+      border-radius: 7px;
       display: grid;
       place-items: center;
-      background: linear-gradient(135deg, var(--red), var(--gold));
-      color: #10131a;
+      background: var(--red);
+      color: #fff;
       font-weight: 900;
-      box-shadow: 0 10px 28px rgba(240, 77, 77, .26);
-    }
-
-    .status {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--muted);
-      font-size: 13px;
     }
 
     .top-actions {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 10px;
     }
 
-    .auth-btn {
-      min-height: 36px;
-      padding: 0 15px;
-      border: 1px solid rgba(255, 255, 255, .14);
-      border-radius: 8px;
-      background: rgba(255, 255, 255, .055);
-      color: var(--text);
+    .market-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
       font-size: 13px;
-      font-weight: 700;
-      font-family: inherit;
-      cursor: pointer;
-      transition: border-color .18s ease, background .18s ease, transform .18s ease;
+      white-space: nowrap;
     }
 
-    .auth-btn:hover {
-      transform: translateY(-1px);
-      border-color: rgba(245, 184, 75, .45);
-      background: rgba(245, 184, 75, .1);
-    }
-
-    .status-dot {
+    .state-dot {
       width: 8px;
       height: 8px;
       border-radius: 999px;
       background: var(--green);
-      box-shadow: 0 0 0 6px rgba(20, 199, 132, .12);
+      box-shadow: 0 0 0 4px rgba(15, 159, 110, .13);
+    }
+
+    .auth-btn,
+    .primary-btn,
+    .secondary-btn,
+    .auth-row button,
+    .auth-code-btn {
+      min-height: 38px;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: border-color .16s ease, background .16s ease, color .16s ease, box-shadow .16s ease;
+    }
+
+    .auth-btn,
+    .secondary-btn {
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .auth-btn:hover,
+    .secondary-btn:hover {
+      border-color: var(--blue);
+      color: var(--blue);
+    }
+
+    .page {
+      width: min(1220px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 26px 0 36px;
     }
 
     .hero {
-      flex: 1;
-      width: min(1180px, calc(100% - 48px));
-      margin: 0 auto;
-      padding: 74px 0 42px;
       display: grid;
-      grid-template-columns: minmax(0, 1.08fr) minmax(330px, .92fr);
-      gap: 42px;
-      align-items: center;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      gap: 18px;
+      align-items: stretch;
+      margin-bottom: 18px;
+    }
+
+    .intro,
+    .summary-panel,
+    .panel,
+    .feature {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .intro {
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 286px;
     }
 
     .eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 7px 12px;
-      margin-bottom: 24px;
-      border: 1px solid rgba(245, 184, 75, .24);
-      border-radius: 999px;
-      background: rgba(245, 184, 75, .08);
-      color: #ffd27a;
+      color: var(--blue);
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 800;
+      margin-bottom: 12px;
     }
 
     h1 {
       max-width: 720px;
-      font-size: clamp(42px, 7vw, 82px);
-      line-height: 1.04;
+      font-size: clamp(30px, 4vw, 48px);
+      line-height: 1.14;
       letter-spacing: 0;
       font-weight: 900;
     }
 
     .lead {
-      max-width: 640px;
-      margin-top: 24px;
-      color: #c6ceda;
-      font-size: 18px;
-      line-height: 1.8;
+      max-width: 780px;
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
     }
 
     .actions {
       display: flex;
       align-items: center;
-      gap: 14px;
-      margin-top: 34px;
+      gap: 10px;
       flex-wrap: wrap;
+      margin-top: 24px;
     }
 
     .primary-btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 10px;
-      min-height: 52px;
-      padding: 0 26px;
-      border: 0;
-      border-radius: 8px;
-      color: #141820;
-      background: linear-gradient(135deg, #ff6464, #f5c85b);
-      box-shadow: 0 16px 42px rgba(240, 77, 77, .32);
-      font-size: 16px;
+      gap: 8px;
+      min-height: 42px;
+      padding: 0 18px;
+      border: 1px solid var(--red);
+      background: var(--red);
+      color: #fff;
       font-weight: 800;
-      text-decoration: none;
-      transition: transform .18s ease, box-shadow .18s ease;
     }
 
     .primary-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 20px 54px rgba(240, 77, 77, .42);
+      background: #b91c1c;
+      border-color: #b91c1c;
+      box-shadow: 0 10px 22px rgba(220, 38, 38, .18);
     }
 
-    .secondary-note {
+    .quick-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 22px;
+    }
+
+    .quick-stat {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-2);
+    }
+
+    .quick-value {
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .quick-label {
+      margin-top: 4px;
       color: var(--muted);
-      font-size: 13px;
+      font-size: 12px;
     }
 
-    .market-panel {
-      position: relative;
-      min-height: 470px;
-      padding: 22px;
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      background: linear-gradient(180deg, rgba(25, 31, 43, .86), rgba(12, 16, 24, .86));
-      box-shadow: var(--shadow);
-      overflow: hidden;
-    }
-
-    .market-panel::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, rgba(240, 77, 77, .12), transparent 42%, rgba(91, 140, 255, .1));
-      pointer-events: none;
-    }
-
-    .panel-head,
-    .ticker-row,
-    .chart,
-    .metrics {
-      position: relative;
-      z-index: 1;
-    }
-
-    .panel-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 18px;
+    .summary-panel {
+      padding: 18px;
     }
 
     .panel-title {
-      font-size: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      font-weight: 900;
+    }
+
+    .tag {
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--green-soft);
+      color: var(--green);
+      font-size: 12px;
       font-weight: 800;
     }
 
-    .panel-tag {
-      padding: 5px 10px;
-      border-radius: 999px;
-      color: #ffd27a;
-      background: rgba(245, 184, 75, .1);
-      border: 1px solid rgba(245, 184, 75, .22);
-      font-size: 12px;
-      font-weight: 700;
+    .index-list {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 14px;
     }
 
-    .ticker-row {
+    .index-row,
+    .stock-row {
       display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 12px;
       align-items: center;
-      padding: 14px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, .08);
+      gap: 10px;
+    }
+
+    .index-row {
+      grid-template-columns: 1fr auto auto;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-2);
+      font-size: 13px;
+    }
+
+    .index-name,
+    .stock-code,
+    .small-label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .index-price,
+    .change,
+    .money {
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .change {
+      color: var(--red);
+    }
+
+    .watch-box {
+      padding: 13px;
+      border: 1px solid #f1d2d2;
+      border-radius: 7px;
+      background: var(--red-soft);
+    }
+
+    .watch-title {
+      color: var(--red);
+      font-size: 13px;
+      font-weight: 900;
+      margin-bottom: 8px;
+    }
+
+    .watch-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .watch-item {
+      min-height: 54px;
+      padding: 9px;
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    .watch-value {
+      margin-top: 4px;
+      font-weight: 900;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr);
+      gap: 18px;
+    }
+
+    .panel {
+      overflow: hidden;
+    }
+
+    .panel-head {
+      height: 50px;
+      padding: 0 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-2);
+      font-weight: 900;
+    }
+
+    .panel-body {
+      padding: 16px 18px 18px;
+    }
+
+    .rank-table {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      overflow: hidden;
+    }
+
+    .table-head,
+    .stock-row {
+      display: grid;
+      grid-template-columns: 58px 1fr 88px 88px;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+    }
+
+    .table-head {
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .stock-row {
+      min-height: 58px;
+      border-bottom: 1px solid var(--line);
+      font-size: 13px;
+    }
+
+    .stock-row:last-child {
+      border-bottom: 0;
+    }
+
+    .rank {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 6px;
+      background: var(--red-soft);
+      color: var(--red);
+      font-weight: 900;
     }
 
     .stock-name {
-      color: #f7f8fb;
-      font-weight: 800;
-      margin-bottom: 4px;
-    }
-
-    .stock-code {
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .stock-change {
-      color: var(--red);
-      font-size: 18px;
       font-weight: 900;
-      font-variant-numeric: tabular-nums;
+      margin-bottom: 3px;
     }
 
-    .chart {
-      height: 132px;
-      margin: 24px 0;
-      display: flex;
-      align-items: end;
-      gap: 8px;
-      padding: 14px;
-      border-radius: 12px;
-      background: rgba(255, 255, 255, .045);
-      border: 1px solid rgba(255, 255, 255, .07);
-    }
-
-    .bar {
-      flex: 1;
-      min-width: 9px;
-      border-radius: 6px 6px 2px 2px;
-      background: linear-gradient(180deg, #ff7777, #d93636);
-      opacity: .88;
-      animation: rise .8s ease both;
-    }
-
-    .bar:nth-child(2n) {
-      background: linear-gradient(180deg, #f6c95f, #d49222);
-    }
-
-    @keyframes rise {
-      from { transform: scaleY(.25); transform-origin: bottom; opacity: .28; }
-      to { transform: scaleY(1); transform-origin: bottom; opacity: .88; }
-    }
-
-    .metrics {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
-    }
-
-    .metric {
-      padding: 14px;
-      border: 1px solid rgba(255, 255, 255, .08);
-      border-radius: 12px;
-      background: rgba(255, 255, 255, .045);
-    }
-
-    .metric-label {
-      color: var(--muted);
-      font-size: 12px;
-      margin-bottom: 7px;
-    }
-
-    .metric-value {
-      font-size: 20px;
-      font-weight: 900;
-      font-variant-numeric: tabular-nums;
+    .money {
+      color: var(--gold);
     }
 
     .features {
-      width: min(1180px, calc(100% - 48px));
-      margin: 0 auto 42px;
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 14px;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
     }
 
     .feature {
-      padding: 18px;
-      min-height: 118px;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      background: var(--panel);
-      backdrop-filter: blur(14px);
+      min-height: 130px;
+      padding: 16px;
+      box-shadow: none;
     }
 
     .feature-icon {
-      width: 34px;
-      height: 34px;
-      margin-bottom: 14px;
-      border-radius: 9px;
+      width: 30px;
+      height: 30px;
+      margin-bottom: 12px;
+      border-radius: 7px;
       display: grid;
       place-items: center;
-      color: #141820;
-      background: linear-gradient(135deg, #f45b5b, #f5bd53);
+      background: var(--blue-soft);
+      color: var(--blue);
       font-weight: 900;
     }
 
     .feature h2 {
       font-size: 16px;
-      margin-bottom: 8px;
+      margin-bottom: 7px;
     }
 
     .feature p {
@@ -383,16 +449,16 @@
       align-items: center;
       justify-content: center;
       padding: 18px;
-      background: rgba(0, 0, 0, .62);
-      backdrop-filter: blur(8px);
+      background: rgba(15, 23, 42, .5);
+      backdrop-filter: blur(6px);
     }
 
     .auth-modal {
-      width: min(420px, 100%);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      background: rgba(16, 21, 31, .96);
-      box-shadow: var(--shadow);
+      width: min(430px, 100%);
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 22px 60px rgba(15, 23, 42, .22);
       overflow: hidden;
     }
 
@@ -400,39 +466,67 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 18px 20px;
-      border-bottom: 1px solid var(--border);
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
       font-weight: 900;
     }
 
     .auth-close {
-      border: 0;
+      width: 32px;
+      height: 32px;
+      border: 1px solid transparent;
+      border-radius: 7px;
       background: transparent;
       color: var(--muted);
-      font-size: 20px;
+      font-size: 22px;
       cursor: pointer;
     }
 
+    .auth-close:hover {
+      border-color: var(--line);
+      color: var(--text);
+    }
+
     .auth-body {
+      padding: 18px;
+    }
+
+    .auth-form,
+    .account-panel {
       display: grid;
       gap: 11px;
-      padding: 18px 20px 20px;
     }
 
     .auth-body input {
       width: 100%;
-      padding: 11px 12px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: rgba(255, 255, 255, .06);
+      min-height: 42px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
       color: var(--text);
-      font-size: 14px;
-      font-family: inherit;
+      outline: none;
     }
 
     .auth-body input:focus {
-      outline: none;
-      border-color: rgba(245, 184, 75, .55);
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(29, 78, 216, .12);
+    }
+
+    .auth-code-row {
+      display: none;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .auth-code-btn {
+      min-width: 106px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      font-weight: 800;
+      white-space: nowrap;
     }
 
     .auth-row {
@@ -442,20 +536,17 @@
 
     .auth-row button {
       flex: 1;
-      min-height: 42px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: rgba(255, 255, 255, .055);
+      min-height: 40px;
+      border: 1px solid var(--line);
+      background: #fff;
       color: var(--text);
       font-weight: 800;
-      font-family: inherit;
-      cursor: pointer;
     }
 
     .auth-row button.primary {
-      border: 0;
-      color: #141820;
-      background: linear-gradient(135deg, #ff6464, #f5c85b);
+      border-color: var(--blue);
+      background: var(--blue);
+      color: #fff;
     }
 
     .auth-msg {
@@ -467,198 +558,259 @@
 
     .account-panel {
       display: none;
-      gap: 12px;
     }
 
     .account-name {
       padding: 12px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: rgba(255, 255, 255, .055);
-      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-2);
       font-weight: 800;
       word-break: break-all;
     }
 
-    @media (max-width: 920px) {
-      .topbar {
-        padding: 0 22px;
-      }
-
-      .hero {
+    @media (max-width: 980px) {
+      .hero,
+      .main-grid {
         grid-template-columns: 1fr;
-        padding-top: 42px;
-      }
-
-      .market-panel {
-        min-height: auto;
-      }
-
-      .features {
-        grid-template-columns: repeat(2, 1fr);
       }
     }
 
-    @media (max-width: 560px) {
-      .status {
+    @media (max-width: 640px) {
+      .topbar {
+        padding: 0 14px;
+      }
+
+      .brand span {
+        max-width: 128px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .market-state {
         display: none;
       }
 
-      .top-actions {
-        gap: 8px;
+      .page {
+        width: min(100% - 24px, 1220px);
+        padding-top: 16px;
       }
 
-      .hero,
-      .features {
-        width: min(100% - 28px, 1180px);
+      .intro {
+        padding: 20px;
       }
 
       h1 {
-        font-size: 42px;
+        font-size: 30px;
       }
 
-      .lead {
-        font-size: 16px;
-      }
-
-      .primary-btn {
+      .primary-btn,
+      .secondary-btn {
         width: 100%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
 
-      .features,
-      .metrics {
+      .quick-stats,
+      .watch-grid,
+      .features {
         grid-template-columns: 1fr;
+      }
+
+      .table-head,
+      .stock-row {
+        grid-template-columns: 42px 1fr 70px;
+      }
+
+      .table-head span:nth-child(4),
+      .stock-row > span:nth-child(4) {
+        display: none;
       }
     }
   </style>
 </head>
 <body>
-  <div class="page">
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark">A</div>
-        <span>A股涨幅榜系统</span>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">A</div>
+      <span>A股涨幅榜系统</span>
+    </div>
+    <div class="top-actions">
+      <div class="market-state">
+        <span class="state-dot"></span>
+        <span>行情数据实时更新</span>
       </div>
-      <div class="top-actions">
-        <div class="status">
-          <span class="status-dot"></span>
-          <span>实时更新中</span>
+      <button class="auth-btn" id="auth-btn">登录</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="hero">
+      <div class="intro">
+        <div>
+          <div class="eyebrow">A股盘中行情工具</div>
+          <h1>更快查看强势股、指数状态和筛选结果。</h1>
+          <p class="lead">
+            进入行情页后，可以按涨幅、成交额、换手率、量比和资金数据观察市场，适合盘中快速扫榜和收盘复盘。
+          </p>
+          <div class="actions">
+            <a class="primary-btn" id="enter-market-btn" href="/market">进入实时行情 →</a>
+            <button class="secondary-btn" id="quick-login-btn">登录账号</button>
+          </div>
         </div>
-        <button class="auth-btn" id="auth-btn">&#30331;&#24405;</button>
+
+        <div class="quick-stats">
+          <div class="quick-stat">
+            <div class="quick-value">实时</div>
+            <div class="quick-label">行情与涨幅刷新</div>
+          </div>
+          <div class="quick-stat">
+            <div class="quick-value">多维</div>
+            <div class="quick-label">量比、换手、资金</div>
+          </div>
+          <div class="quick-stat">
+            <div class="quick-value">可复盘</div>
+            <div class="quick-label">保存筛选记录</div>
+          </div>
+        </div>
       </div>
-    </header>
 
-    <main class="hero">
-      <section>
-        <div class="eyebrow">实时行情 · 智能选股 · 市场监控</div>
-        <h1>聚焦强势股，快速看清今日市场。</h1>
-        <p class="lead">
-          汇总A股涨幅排行、指数状态、量比、资金流向与盘中趋势，用一个清晰界面完成行情观察和选股判断。
-        </p>
-        <div class="actions">
-          <a class="primary-btn" id="enter-market-btn" href="/market" aria-label="进入实时行情">
-            进入实时行情
-            <span>→</span>
-          </a>
-          <span class="secondary-note">登录后进入涨幅榜数据界面</span>
+      <aside class="summary-panel" aria-label="市场概览">
+        <div class="panel-title">
+          <span>市场概览</span>
+          <span class="tag">Live</span>
         </div>
-      </section>
-
-      <aside class="market-panel" aria-label="行情预览">
-        <div class="panel-head">
-          <div class="panel-title">今日强势榜预览</div>
-          <div class="panel-tag">Live</div>
-        </div>
-
-        <div class="ticker-row">
-          <div>
-            <div class="stock-name">强势样本</div>
-            <div class="stock-code">涨幅 / 量比 / 资金</div>
+        <div class="index-list">
+          <div class="index-row">
+            <span class="index-name">上证指数</span>
+            <span class="index-price">3,128.42</span>
+            <span class="change">+0.76%</span>
           </div>
-          <div class="stock-change">+9.96%</div>
-        </div>
-        <div class="ticker-row">
-          <div>
-            <div class="stock-name">板块热度</div>
-            <div class="stock-code">行业轮动跟踪</div>
+          <div class="index-row">
+            <span class="index-name">深证成指</span>
+            <span class="index-price">9,846.31</span>
+            <span class="change">+1.18%</span>
           </div>
-          <div class="stock-change">+6.28%</div>
-        </div>
-        <div class="ticker-row">
-          <div>
-            <div class="stock-name">主力净流入</div>
-            <div class="stock-code">资金方向观察</div>
+          <div class="index-row">
+            <span class="index-name">创业板指</span>
+            <span class="index-price">1,922.08</span>
+            <span class="change">+1.42%</span>
           </div>
-          <div class="stock-change">+3.42亿</div>
         </div>
-
-        <div class="chart" aria-hidden="true">
-          <div class="bar" style="height:42%"></div>
-          <div class="bar" style="height:58%"></div>
-          <div class="bar" style="height:47%"></div>
-          <div class="bar" style="height:72%"></div>
-          <div class="bar" style="height:64%"></div>
-          <div class="bar" style="height:86%"></div>
-          <div class="bar" style="height:76%"></div>
-          <div class="bar" style="height:94%"></div>
-          <div class="bar" style="height:82%"></div>
-          <div class="bar" style="height:98%"></div>
-        </div>
-
-        <div class="metrics">
-          <div class="metric">
-            <div class="metric-label">筛选条件</div>
-            <div class="metric-value">多维</div>
-          </div>
-          <div class="metric">
-            <div class="metric-label">刷新方式</div>
-            <div class="metric-value">实时</div>
-          </div>
-          <div class="metric">
-            <div class="metric-label">记录追踪</div>
-            <div class="metric-value">历史</div>
+        <div class="watch-box">
+          <div class="watch-title">今日看盘重点</div>
+          <div class="watch-grid">
+            <div class="watch-item">
+              <div class="small-label">涨停</div>
+              <div class="watch-value">42</div>
+            </div>
+            <div class="watch-item">
+              <div class="small-label">筛选命中</div>
+              <div class="watch-value">36</div>
+            </div>
+            <div class="watch-item">
+              <div class="small-label">热门板块</div>
+              <div class="watch-value">AI</div>
+            </div>
           </div>
         </div>
       </aside>
-    </main>
-
-    <section class="features" aria-label="核心功能">
-      <article class="feature">
-        <div class="feature-icon">1</div>
-        <h2>实时涨幅榜</h2>
-        <p>按涨幅、成交、换手等指标快速查看市场强势个股。</p>
-      </article>
-      <article class="feature">
-        <div class="feature-icon">2</div>
-        <h2>智能选股</h2>
-        <p>结合涨停历史、分时表现和资金数据做条件筛选。</p>
-      </article>
-      <article class="feature">
-        <div class="feature-icon">3</div>
-        <h2>指数监控</h2>
-        <p>同步观察主要指数状态，减少脱离大盘的误判。</p>
-      </article>
-      <article class="feature">
-        <div class="feature-icon">4</div>
-        <h2>历史记录</h2>
-        <p>保留选股结果，方便复盘和连续跟踪。</p>
-      </article>
     </section>
-  </div>
+
+    <section class="main-grid">
+      <div class="panel">
+        <div class="panel-head">
+          <span>强势股预览</span>
+          <span class="small-label">示例数据，实时数据请进入行情页</span>
+        </div>
+        <div class="panel-body">
+          <div class="rank-table">
+            <div class="table-head">
+              <span>排名</span>
+              <span>股票</span>
+              <span>涨幅</span>
+              <span>资金</span>
+            </div>
+            <div class="stock-row">
+              <span class="rank">1</span>
+              <span>
+                <div class="stock-name">强势样本</div>
+                <div class="stock-code">SZ 000001</div>
+              </span>
+              <span class="change">+9.96%</span>
+              <span class="money">3.4亿</span>
+            </div>
+            <div class="stock-row">
+              <span class="rank">2</span>
+              <span>
+                <div class="stock-name">板块龙头</div>
+                <div class="stock-code">SH 600000</div>
+              </span>
+              <span class="change">+7.28%</span>
+              <span class="money">2.1亿</span>
+            </div>
+            <div class="stock-row">
+              <span class="rank">3</span>
+              <span>
+                <div class="stock-name">量能放大</div>
+                <div class="stock-code">SZ 300000</div>
+              </span>
+              <span class="change">+5.84%</span>
+              <span class="money">1.7亿</span>
+            </div>
+            <div class="stock-row">
+              <span class="rank">4</span>
+              <span>
+                <div class="stock-name">趋势回升</div>
+                <div class="stock-code">SH 688000</div>
+              </span>
+              <span class="change">+4.63%</span>
+              <span class="money">9800万</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="features" aria-label="核心功能">
+        <article class="feature">
+          <div class="feature-icon">1</div>
+          <h2>实时涨幅榜</h2>
+          <p>按涨幅、成交额、换手率和量比观察强势个股。</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">2</div>
+          <h2>条件筛选</h2>
+          <p>结合涨停历史、分时表现和资金数据缩小范围。</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">3</div>
+          <h2>指数监控</h2>
+          <p>同步查看主要指数，减少脱离大盘环境的判断。</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">4</div>
+          <h2>历史记录</h2>
+          <p>保存筛选结果，方便复盘和连续跟踪。</p>
+        </article>
+      </div>
+    </section>
+  </main>
 
   <div class="auth-overlay" id="auth-overlay">
     <div class="auth-modal">
       <div class="auth-head">
         <span id="auth-title">邮箱登录</span>
-        <button class="auth-close" id="auth-close">&times;</button>
+        <button class="auth-close" id="auth-close" aria-label="关闭">&times;</button>
       </div>
       <div class="auth-body">
         <div class="auth-form" id="auth-form">
-        <input id="auth-username" type="email" placeholder="邮箱" autocomplete="email" />
+          <input id="auth-username" type="email" placeholder="邮箱" autocomplete="email" />
           <input id="auth-password" type="password" placeholder="密码（至少6位）" autocomplete="current-password" />
-          <div id="auth-code-row" style="display:none;gap:8px;align-items:center">
-            <input id="auth-code" type="text" placeholder="验证码" maxlength="6" style="flex:1" autocomplete="one-time-code"/>
-            <button id="auth-send-code" style="white-space:nowrap;min-width:90px;min-height:42px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.055);color:var(--text);font-weight:800;font-family:inherit;cursor:pointer">发送验证码</button>
+          <div class="auth-code-row" id="auth-code-row">
+            <input id="auth-code" type="text" placeholder="验证码" maxlength="6" autocomplete="one-time-code" />
+            <button class="auth-code-btn" id="auth-send-code">发送验证码</button>
           </div>
           <div class="auth-row">
             <button class="primary" id="auth-login">登录</button>
@@ -667,11 +819,11 @@
           <div class="auth-msg" id="auth-msg">使用邮箱注册或登录，登录后进入行情页。</div>
         </div>
         <div class="account-panel" id="account-panel">
-          <div class="auth-msg">&#24403;&#21069;&#24050;&#30331;&#24405;</div>
+          <div class="auth-msg">当前已登录</div>
           <div class="account-name" id="account-name">--</div>
           <div class="auth-row">
-            <button class="primary" id="auth-enter">&#36827;&#20837;&#34892;&#24773;</button>
-            <button id="auth-logout">&#36864;&#20986;&#30331;&#24405;</button>
+            <button class="primary" id="auth-enter">进入行情</button>
+            <button id="auth-logout">退出登录</button>
           </div>
         </div>
       </div>
@@ -692,8 +844,8 @@
 
     function updateAuthUI() {
       const btn = document.getElementById('auth-btn');
-      btn.textContent = currentUser ? currentUser.username : '\u767b\u5f55';
-      btn.title = currentUser ? '\u67e5\u770b\u8d26\u53f7' : '\u767b\u5f55\u6216\u6ce8\u518c\u8d26\u53f7';
+      btn.textContent = currentUser ? currentUser.username : '登录';
+      btn.title = currentUser ? '查看账号' : '登录或注册账号';
     }
 
     function openAuth() {
@@ -719,7 +871,10 @@
       const password = document.getElementById('auth-password').value;
       const code = document.getElementById('auth-code').value.trim();
       const msg = document.getElementById('auth-msg');
-      if (mode === 'register' && !code) { msg.textContent = '请输入验证码'; return; }
+      if (mode === 'register' && !code) {
+        msg.textContent = '请输入验证码';
+        return;
+      }
       msg.textContent = mode === 'register' ? '注册中...' : '登录中...';
       const body = { username, password };
       if (mode === 'register') body.code = code;
@@ -746,9 +901,8 @@
       updateAuthUI();
     }
 
-    document.getElementById('auth-btn').addEventListener('click', () => {
-      openAuth();
-    });
+    document.getElementById('auth-btn').addEventListener('click', openAuth);
+    document.getElementById('quick-login-btn').addEventListener('click', openAuth);
     document.getElementById('auth-close').addEventListener('click', closeAuth);
     document.getElementById('auth-overlay').addEventListener('click', e => {
       if (e.target === e.currentTarget) closeAuth();
@@ -770,24 +924,34 @@
       const email = document.getElementById('auth-username').value.trim();
       const btn = document.getElementById('auth-send-code');
       const msg = document.getElementById('auth-msg');
-      if (!email) { msg.textContent = '请输入邮箱'; return; }
+      if (!email) {
+        msg.textContent = '请输入邮箱';
+        return;
+      }
       btn.disabled = true;
       msg.textContent = '发送中...';
       try {
         const res = await fetch('/api/auth/send-code', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email }),
         });
         const json = await res.json();
-        if (!json.success) throw new Error(json.error);
-        msg.textContent = '验证码已发送，请查收邮箱（5分钟有效）';
+        if (!json.success) throw new Error(json.error || '验证码发送失败');
+        msg.textContent = '验证码已发送，请查收邮箱（5分钟有效）。';
         let sec = 60;
         btn.textContent = sec + 's';
         const timer = setInterval(() => {
-          if (--sec <= 0) { clearInterval(timer); btn.disabled = false; btn.textContent = '发送验证码'; }
-          else btn.textContent = sec + 's';
+          sec -= 1;
+          if (sec <= 0) {
+            clearInterval(timer);
+            btn.disabled = false;
+            btn.textContent = '发送验证码';
+          } else {
+            btn.textContent = sec + 's';
+          }
         }, 1000);
-      } catch(e) {
+      } catch (e) {
         msg.textContent = e.message;
         btn.disabled = false;
       }
