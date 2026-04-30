@@ -11,31 +11,50 @@ const PORT = process.env.PORT || 5000;
 const scryptAsync = promisify(crypto.scrypt);
 
 // ── 邮件验证码 ──────────────────────────────────────────────────────────
-const mailTransporter = nodemailer.createTransport({
-  host: 'smtp.qq.com',
-  port: 465,
-  secure: true,
-  auth: { user: '2681544657@qq.com', pass: 'orfqyjkbxvvgdjfe' },
-});
+const SMTP_HOST = process.env.SMTP_HOST || 'smtp.qq.com';
+const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
+const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
+const SMTP_USER = process.env.SMTP_USER || '';
+const SMTP_PASS = process.env.SMTP_PASS || '';
+const SMTP_FROM = process.env.SMTP_FROM || (SMTP_USER ? `"A股涨幅榜" <${SMTP_USER}>` : '');
+const mailTransporter = SMTP_USER && SMTP_PASS
+  ? nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_SECURE,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    })
+  : null;
 const verifyCodes = new Map(); // email -> { code, expires }
 
 // ── 选股历史（持久化到文件）────────────────────────────────────────────
-const HISTORY_FILE = path.join(__dirname, 'screen_history.json');
-const USERS_FILE = path.join(__dirname, 'users.json');
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
+const HISTORY_FILE = path.join(DATA_DIR, 'screen_history.json');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const sessions = new Map();
+
+function ensureDataDir() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
 
 function loadUsers() {
   try {
+    ensureDataDir();
     if (fs.existsSync(USERS_FILE)) {
       const data = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
       return data && typeof data === 'object' && data.users ? data : { users: {} };
     }
-  } catch {}
+  } catch (e) {
+    console.error('Failed to load users:', e);
+  }
   return { users: {} };
 }
 
 function saveUsers(data) {
-  try { fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2), 'utf8'); } catch {}
+  ensureDataDir();
+  const tmpFile = `${USERS_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf8');
+  fs.renameSync(tmpFile, USERS_FILE);
 }
 
 const userStore = loadUsers();
@@ -103,16 +122,22 @@ function requireUser(req, res) {
 
 function loadHistory() {
   try {
+    ensureDataDir();
     if (fs.existsSync(HISTORY_FILE)) {
       const data = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
       return Array.isArray(data) ? data : [];
     }
-  } catch {}
+  } catch (e) {
+    console.error('Failed to load history:', e);
+  }
   return [];
 }
 
 function saveHistory(history) {
-  try { fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf8'); } catch {}
+  ensureDataDir();
+  const tmpFile = `${HISTORY_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(tmpFile, JSON.stringify(history, null, 2), 'utf8');
+  fs.renameSync(tmpFile, HISTORY_FILE);
 }
 
 const screenHistory = loadHistory();
@@ -775,6 +800,9 @@ app.post('/api/auth/send-code', async (req, res) => {
   if (!isValidEmail(email)) {
     return res.status(400).json({ success: false, error: '\u8BF7\u8F93\u5165\u6709\u6548\u7684\u90AE\u7BB1\u5730\u5740' });
   }
+  if (!mailTransporter || !SMTP_FROM) {
+    return res.status(500).json({ success: false, error: '\u90AE\u4EF6\u670D\u52A1\u672A\u914D\u7F6E\uFF0C\u8BF7\u8054\u7CFB\u7BA1\u7406\u5458' });
+  }
   if (userStore.users[email]) {
     return res.status(409).json({ success: false, error: '\u8BE5\u90AE\u7BB1\u5DF2\u88AB\u6CE8\u518C' });
   }
@@ -786,7 +814,7 @@ app.post('/api/auth/send-code', async (req, res) => {
   verifyCodes.set(email, { code, expires: Date.now() + 5 * 60000, sent: Date.now() });
   try {
     await mailTransporter.sendMail({
-      from: '"A\u80A1\u6DA8\u5E45\u699C" <2681544657@qq.com>',
+      from: SMTP_FROM,
       to: email,
       subject: '\u6CE8\u518C\u9A8C\u8BC1\u7801',
       html: `<p>\u60A8\u7684\u9A8C\u8BC1\u7801\u662F\uFF1A<b style="font-size:24px;color:#e53e3e">${code}</b></p><p>5\u5206\u949F\u5185\u6709\u6548\uFF0C\u8BF7\u52FF\u6CC4\u9732\u3002</p>`,
@@ -815,18 +843,25 @@ app.post('/api/auth/register', async (req, res) => {
   if (userStore.users[username]) {
     return res.status(409).json({ success: false, error: '\u8BE5\u90AE\u7BB1\u5DF2\u88AB\u6CE8\u518C' });
   }
-  verifyCodes.delete(username);
-  userStore.users[username] = {
+  const nextUser = {
     username,
     password_hash: await hashPassword(password),
     created_at: nowStr(),
     profile: { watchlist: [], settings: null, near_limit_range: null, theme: null },
   };
-  saveUsers(userStore);
+  userStore.users[username] = nextUser;
+  try {
+    saveUsers(userStore);
+  } catch (e) {
+    delete userStore.users[username];
+    console.error('Failed to save registered user:', e);
+    return res.status(500).json({ success: false, error: '\u8D26\u53F7\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u670D\u52A1\u5668\u5B58\u50A8\u914D\u7F6E' });
+  }
+  verifyCodes.delete(username);
   const sid = crypto.randomBytes(32).toString('hex');
   sessions.set(sid, username);
   setSessionCookie(req, res, sid);
-  res.json({ success: true, user: publicUser(userStore.users[username]), profile: userStore.users[username].profile });
+  res.json({ success: true, user: publicUser(nextUser), profile: nextUser.profile });
 });
 
 app.post('/api/auth/login', async (req, res) => {
@@ -862,6 +897,7 @@ app.put('/api/profile', (req, res) => {
   const watchlist = Array.isArray(body.watchlist)
     ? body.watchlist.slice(0, 200).filter(w => /^\d{6}$/.test(String(w.code || ''))).map(w => ({ code: String(w.code), name: String(w.name || '') }))
     : user.profile?.watchlist || [];
+  const previousProfile = user.profile;
   user.profile = {
     watchlist,
     settings: body.settings && typeof body.settings === 'object' ? body.settings : user.profile?.settings || null,
@@ -869,7 +905,13 @@ app.put('/api/profile', (req, res) => {
     theme: typeof body.theme === 'string' ? body.theme : user.profile?.theme || null,
     updated_at: nowStr(),
   };
-  saveUsers(userStore);
+  try {
+    saveUsers(userStore);
+  } catch (e) {
+    user.profile = previousProfile;
+    console.error('Failed to save user profile:', e);
+    return res.status(500).json({ success: false, error: '\u8D26\u53F7\u4FE1\u606F\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5' });
+  }
   res.json({ success: true, profile: user.profile });
 });
 
