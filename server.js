@@ -23,6 +23,9 @@ const mailTransporter = SMTP_USER && SMTP_PASS
       port: SMTP_PORT,
       secure: SMTP_SECURE,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     })
   : null;
 const verifyCodes = new Map(); // email -> { code, expires }
@@ -821,6 +824,7 @@ app.post('/api/auth/send-code', async (req, res) => {
     });
     res.json({ success: true });
   } catch (e) {
+    console.error('Failed to send verification email:', e);
     verifyCodes.delete(email);
     res.status(500).json({ success: false, error: '\u90AE\u4EF6\u53D1\u9001\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5' });
   }
