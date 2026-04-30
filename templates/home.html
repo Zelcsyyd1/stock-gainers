@@ -682,21 +682,21 @@
           <span>市场概览</span>
           <span class="tag">Live</span>
         </div>
-        <div class="index-list">
+        <div class="index-list" id="index-list">
           <div class="index-row">
             <span class="index-name">上证指数</span>
-            <span class="index-price">3,128.42</span>
-            <span class="change">+0.76%</span>
+            <span class="index-price">--</span>
+            <span class="change">--</span>
           </div>
           <div class="index-row">
             <span class="index-name">深证成指</span>
-            <span class="index-price">9,846.31</span>
-            <span class="change">+1.18%</span>
+            <span class="index-price">--</span>
+            <span class="change">--</span>
           </div>
           <div class="index-row">
             <span class="index-name">创业板指</span>
-            <span class="index-price">1,922.08</span>
-            <span class="change">+1.42%</span>
+            <span class="index-price">--</span>
+            <span class="change">--</span>
           </div>
         </div>
         <div class="watch-box">
@@ -704,15 +704,15 @@
           <div class="watch-grid">
             <div class="watch-item">
               <div class="small-label">涨停</div>
-              <div class="watch-value">42</div>
+              <div class="watch-value" id="home-limit-count">--</div>
             </div>
             <div class="watch-item">
-              <div class="small-label">筛选命中</div>
-              <div class="watch-value">36</div>
+              <div class="small-label">市场状态</div>
+              <div class="watch-value" id="home-market-status">--</div>
             </div>
             <div class="watch-item">
               <div class="small-label">热门板块</div>
-              <div class="watch-value">AI</div>
+              <div class="watch-value" id="home-hot-sector">--</div>
             </div>
           </div>
         </div>
@@ -974,6 +974,38 @@
     });
 
     initAuth();
+
+    async function loadHomeSummary() {
+      try {
+        const [indicesRes, stocksRes, sectorsRes] = await Promise.all([
+          fetch('/api/indices').then(r => r.json()).catch(() => null),
+          fetch('/api/stocks?size=300').then(r => r.json()).catch(() => null),
+          fetch('/api/sectors?type=industry').then(r => r.json()).catch(() => null),
+        ]);
+        if (indicesRes?.success && indicesRes.data.length) {
+          const list = document.getElementById('index-list');
+          list.innerHTML = indicesRes.data.slice(0, 3).map(idx => {
+            const pct = Number(idx.change_pct);
+            const color = pct >= 0 ? 'var(--red)' : 'var(--green)';
+            const sign = pct >= 0 ? '+' : '';
+            return `<div class="index-row">
+              <span class="index-name">${idx.name}</span>
+              <span class="index-price">${Number(idx.price).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
+              <span class="change" style="color:${color}">${sign}${pct.toFixed(2)}%</span>
+            </div>`;
+          }).join('');
+        }
+        if (stocksRes?.success) {
+          const limitCount = stocksRes.data.filter(s => parseFloat(s.change_pct) >= 9.9).length;
+          document.getElementById('home-limit-count').textContent = limitCount;
+          document.getElementById('home-market-status').textContent = stocksRes.market_status || '--';
+        }
+        if (sectorsRes?.success && sectorsRes.data.length) {
+          document.getElementById('home-hot-sector').textContent = sectorsRes.data[0].name;
+        }
+      } catch {}
+    }
+    loadHomeSummary();
   </script>
 </body>
 </html>

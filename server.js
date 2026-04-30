@@ -718,41 +718,6 @@ function nowStr() {
          `${pad(bj.getHours())}:${pad(bj.getMinutes())}:${pad(bj.getSeconds())}`;
 }
 
-// K线 + 分时图 + 连板数
-// klt: 5=5分钟, 15=15分钟, 30=30分钟, 60=60分钟, 101=日线, 102=周线, 103=月线
-app.get('/api/chart/:code', async (req, res) => {
-  const code = req.params.code;
-  const secid = getSecId(code);
-  const klt = parseInt(req.query.klt) || 101;
-  const lmt = klt <= 60 ? 240 : (klt === 102 ? 104 : 60); // 分钟线多取数据点
-  const threshold = (code.startsWith('3') || code.startsWith('688')) ? 19.5 : 9.9;
-  try {
-    // 仅日线需要同时获取分时图数据（用于 trend 标签页）
-    const [klineResp, trends] = await Promise.all([
-      fetch(
-        `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}` +
-        `&fields1=f1,f2,f3,f4,f5&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61` +
-        `&klt=${klt}&fqt=0&end=20991231&lmt=${lmt}`,
-        { headers: EM_HEADERS, signal: AbortSignal.timeout(8000) }
-      ),
-      klt === 101 ? fetchIntradayTrends(code) : Promise.resolve([]),
-    ]);
-    const klineRaw = await klineResp.json();
-    const klines = (klineRaw?.data?.klines ?? []).map(k => {
-      const p = k.split(',');
-      return { date: p[0], open: +p[1], close: +p[2], high: +p[3], low: +p[4], volume: +p[5], change_pct: +p[8], prev_close: +p[2] - +p[9] };
-    });
-    // 连板数：从最新一天往前数连续涨停天数
-    let consecutive = 0;
-    for (let i = klines.length - 1; i >= 0; i--) {
-      if (klines[i].change_pct >= threshold) consecutive++;
-      else break;
-    }
-    res.json({ success: true, klines, trends, consecutive });
-  } catch (e) {
-    res.json({ success: false, error: e.message, klines: [], trends: [], consecutive: 0 });
-  }
-});
 
 // 大盘指数行情
 const INDEX_SECIDS = ['1.000001', '0.399001', '0.399006', '0.000688'];
