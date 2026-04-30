@@ -1,66 +1,20 @@
 const express = require('express');
 const path = require('path');
-const fs = require('fs');
 const crypto = require('crypto');
 const { promisify } = require('util');
-const nodemailer = require('nodemailer');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 5000;
 const scryptAsync = promisify(crypto.scrypt);
 
-// ── 邮件验证码 ──────────────────────────────────────────────────────────
-const SMTP_HOST = process.env.SMTP_HOST || 'smtp.qq.com';
-const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
-const SMTP_USER = process.env.SMTP_USER || '';
-const SMTP_PASS = process.env.SMTP_PASS || '';
-const SMTP_FROM = process.env.SMTP_FROM || (SMTP_USER ? `"A股涨幅榜" <${SMTP_USER}>` : '');
-const mailTransporter = SMTP_USER && SMTP_PASS
-  ? nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-    })
-  : null;
-const verifyCodes = new Map(); // email -> { code, expires }
+// ── Supabase ─────────────────────────────────────────────────────────────
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://wcjkpexotnxkwjryflfp.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// ── 选股历史（持久化到文件）────────────────────────────────────────────
-const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
-const HISTORY_FILE = path.join(DATA_DIR, 'screen_history.json');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-const sessions = new Map();
-
-function ensureDataDir() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
-function loadUsers() {
-  try {
-    ensureDataDir();
-    if (fs.existsSync(USERS_FILE)) {
-      const data = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
-      return data && typeof data === 'object' && data.users ? data : { users: {} };
-    }
-  } catch (e) {
-    console.error('Failed to load users:', e);
-  }
-  return { users: {} };
-}
-
-function saveUsers(data) {
-  ensureDataDir();
-  const tmpFile = `${USERS_FILE}.${process.pid}.tmp`;
-  fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf8');
-  fs.renameSync(tmpFile, USERS_FILE);
-}
-
-const userStore = loadUsers();
+const sessions = new Map(); // sid -> username
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -108,42 +62,22 @@ function clearSessionCookie(res) {
   res.setHeader('Set-Cookie', 'sid=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
 }
 
-function currentUser(req) {
+async function currentUser(req) {
   const sid = parseCookies(req).sid;
   const username = sid ? sessions.get(sid) : null;
-  return username ? userStore.users[username] : null;
+  if (!username) return null;
+  const { data } = await supabase.from('users').select('*').eq('username', username).single();
+  return data || null;
 }
 
-function requireUser(req, res) {
-  const user = currentUser(req);
+async function requireUser(req, res) {
+  const user = await currentUser(req);
   if (!user) {
     res.status(401).json({ success: false, error: '请先登录' });
     return null;
   }
   return user;
 }
-
-function loadHistory() {
-  try {
-    ensureDataDir();
-    if (fs.existsSync(HISTORY_FILE)) {
-      const data = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
-      return Array.isArray(data) ? data : [];
-    }
-  } catch (e) {
-    console.error('Failed to load history:', e);
-  }
-  return [];
-}
-
-function saveHistory(history) {
-  ensureDataDir();
-  const tmpFile = `${HISTORY_FILE}.${process.pid}.tmp`;
-  fs.writeFileSync(tmpFile, JSON.stringify(history, null, 2), 'utf8');
-  fs.renameSync(tmpFile, HISTORY_FILE);
-}
-
-const screenHistory = loadHistory();
 
 function getBeijingDate() {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
@@ -753,86 +687,53 @@ async function fetchIndices() {
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'templates', 'home.html')));
-app.get('/market', (req, res) => {
-  if (!currentUser(req)) return res.redirect('/');
+app.get('/market', async (req, res) => {
+  if (!(await currentUser(req))) return res.redirect('/');
   res.sendFile(path.join(__dirname, 'templates', 'index.html'));
 });
 
-app.get('/api/auth/me', (req, res) => {
-  const user = currentUser(req);
+app.get('/api/auth/me', async (req, res) => {
+  const user = await currentUser(req);
   res.json({ success: true, user: publicUser(user), profile: user?.profile || null });
-});
-
-app.post('/api/auth/send-code', async (req, res) => {
-  const email = normalizeEmail(req.body.email);
-  if (!isValidEmail(email)) {
-    return res.status(400).json({ success: false, error: '\u8BF7\u8F93\u5165\u6709\u6548\u7684\u90AE\u7BB1\u5730\u5740' });
-  }
-  if (!mailTransporter || !SMTP_FROM) {
-    return res.status(500).json({ success: false, error: '\u90AE\u4EF6\u670D\u52A1\u672A\u914D\u7F6E\uFF0C\u8BF7\u8054\u7CFB\u7BA1\u7406\u5458' });
-  }
-  if (userStore.users[email]) {
-    return res.status(409).json({ success: false, error: '\u8BE5\u90AE\u7BB1\u5DF2\u88AB\u6CE8\u518C' });
-  }
-  const existing = verifyCodes.get(email);
-  if (existing && Date.now() - existing.sent < 60000) {
-    return res.status(429).json({ success: false, error: '\u8BF7\u7A0D\u540E\u518D\u53D1\u9001' });
-  }
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  verifyCodes.set(email, { code, expires: Date.now() + 5 * 60000, sent: Date.now() });
-  try {
-    await mailTransporter.sendMail({
-      from: SMTP_FROM,
-      to: email,
-      subject: '\u6CE8\u518C\u9A8C\u8BC1\u7801',
-      html: `<p>\u60A8\u7684\u9A8C\u8BC1\u7801\u662F\uFF1A<b style="font-size:24px;color:#e53e3e">${code}</b></p><p>5\u5206\u949F\u5185\u6709\u6548\uFF0C\u8BF7\u52FF\u6CC4\u9732\u3002</p>`,
-    });
-    res.json({ success: true });
-  } catch (e) {
-    console.error('Failed to send verification email:', e);
-    verifyCodes.delete(email);
-    res.status(500).json({ success: false, error: '\u90AE\u4EF6\u53D1\u9001\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5' });
-  }
 });
 
 app.post('/api/auth/register', async (req, res) => {
   const username = normalizeEmail(req.body.username);
   const password = String(req.body.password || '');
   if (!isValidEmail(username)) {
-    return res.status(400).json({ success: false, error: '\u8BF7\u8F93\u5165\u6709\u6548\u7684\u90AE\u7BB1\u5730\u5740' });
+    return res.status(400).json({ success: false, error: '请输入有效的邮箱地址' });
   }
   if (password.length < 6) {
-    return res.status(400).json({ success: false, error: '\u5BC6\u7801\u81F3\u5C116\u4F4D' });
+    return res.status(400).json({ success: false, error: '密码至少6位' });
   }
-  if (userStore.users[username]) {
-    return res.status(409).json({ success: false, error: '\u8BE5\u90AE\u7BB1\u5DF2\u88AB\u6CE8\u518C' });
+  const { data: existing } = await supabase.from('users').select('username').eq('username', username).single();
+  if (existing) {
+    return res.status(409).json({ success: false, error: '该邮箱已被注册' });
   }
+  const profile = { watchlist: [], settings: null, near_limit_range: null, theme: null };
   const nextUser = {
     username,
     password_hash: await hashPassword(password),
     created_at: nowStr(),
-    profile: { watchlist: [], settings: null, near_limit_range: null, theme: null },
+    profile,
   };
-  userStore.users[username] = nextUser;
-  try {
-    saveUsers(userStore);
-  } catch (e) {
-    delete userStore.users[username];
-    console.error('Failed to save registered user:', e);
-    return res.status(500).json({ success: false, error: '\u8D26\u53F7\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u670D\u52A1\u5668\u5B58\u50A8\u914D\u7F6E' });
+  const { error } = await supabase.from('users').insert(nextUser);
+  if (error) {
+    console.error('Failed to save registered user:', error);
+    return res.status(500).json({ success: false, error: '账号保存失败，请稍后重试' });
   }
   const sid = crypto.randomBytes(32).toString('hex');
   sessions.set(sid, username);
   setSessionCookie(req, res, sid);
-  res.json({ success: true, user: publicUser(nextUser), profile: nextUser.profile });
+  res.json({ success: true, user: publicUser(nextUser), profile });
 });
 
 app.post('/api/auth/login', async (req, res) => {
   const username = normalizeEmail(req.body.username);
   const password = String(req.body.password || '');
-  const user = userStore.users[username];
+  const { data: user } = await supabase.from('users').select('*').eq('username', username).single();
   if (!user || !(await verifyPassword(password, user.password_hash))) {
-    return res.status(401).json({ success: false, error: '\u90AE\u7BB1\u6216\u5BC6\u7801\u9519\u8BEF' });
+    return res.status(401).json({ success: false, error: '邮箱或密码错误' });
   }
   const sid = crypto.randomBytes(32).toString('hex');
   sessions.set(sid, username);
@@ -847,35 +748,32 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/profile', (req, res) => {
-  const user = requireUser(req, res);
+app.get('/api/profile', async (req, res) => {
+  const user = await requireUser(req, res);
   if (!user) return;
   res.json({ success: true, profile: user.profile || {} });
 });
 
-app.put('/api/profile', (req, res) => {
-  const user = requireUser(req, res);
+app.put('/api/profile', async (req, res) => {
+  const user = await requireUser(req, res);
   if (!user) return;
   const body = req.body || {};
   const watchlist = Array.isArray(body.watchlist)
     ? body.watchlist.slice(0, 200).filter(w => /^\d{6}$/.test(String(w.code || ''))).map(w => ({ code: String(w.code), name: String(w.name || '') }))
     : user.profile?.watchlist || [];
-  const previousProfile = user.profile;
-  user.profile = {
+  const newProfile = {
     watchlist,
     settings: body.settings && typeof body.settings === 'object' ? body.settings : user.profile?.settings || null,
     near_limit_range: body.near_limit_range && typeof body.near_limit_range === 'object' ? body.near_limit_range : user.profile?.near_limit_range || null,
     theme: typeof body.theme === 'string' ? body.theme : user.profile?.theme || null,
     updated_at: nowStr(),
   };
-  try {
-    saveUsers(userStore);
-  } catch (e) {
-    user.profile = previousProfile;
-    console.error('Failed to save user profile:', e);
-    return res.status(500).json({ success: false, error: '\u8D26\u53F7\u4FE1\u606F\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5' });
+  const { error } = await supabase.from('users').update({ profile: newProfile }).eq('username', user.username);
+  if (error) {
+    console.error('Failed to save user profile:', error);
+    return res.status(500).json({ success: false, error: '账号信息保存失败，请稍后再试' });
   }
-  res.json({ success: true, profile: user.profile });
+  res.json({ success: true, profile: newProfile });
 });
 
 app.get('/api/stocks', async (req, res) => {
@@ -1014,8 +912,8 @@ app.get('/api/screen', async (req, res) => {
     const passed = results.filter(s => s.pass);
     const time   = nowStr();
 
-    // 保存历史
-    screenHistory.unshift({
+    // 保存历史到 Supabase
+    await supabase.from('screen_history').insert({
       id:               Date.now(),
       time,
       params:           { ...params, max_cap: params.max_cap / 1e8 },
@@ -1023,9 +921,7 @@ app.get('/api/screen', async (req, res) => {
       total_candidates: candidates.length,
       total_passed:     passed.length,
       passed:           passed.map(s => ({ code: s.code, name: s.name, change_pct: s.change_pct, price: s.price })),
-    });
-    if (screenHistory.length > 100) screenHistory.length = 100;
-    saveHistory(screenHistory);
+    }).catch(e => console.error('Failed to save history:', e));
 
     res.json({
       success: true, passed, all_candidates: results,
@@ -1040,8 +936,10 @@ app.get('/api/screen', async (req, res) => {
 });
 
 // 历史记录
-app.get('/api/history', (req, res) => {
-  res.json({ success: true, history: screenHistory });
+app.get('/api/history', async (req, res) => {
+  const { data, error } = await supabase.from('screen_history').select('*').order('id', { ascending: false }).limit(100);
+  if (error) return res.json({ success: false, error: error.message, history: [] });
+  res.json({ success: true, history: data || [] });
 });
 
 // Webhook 推送代理（避免前端跨域）
