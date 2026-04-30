@@ -798,16 +798,11 @@ app.post('/api/auth/send-code', async (req, res) => {
 app.post('/api/auth/register', async (req, res) => {
   const username = normalizeEmail(req.body.username);
   const password = String(req.body.password || '');
-  const code = String(req.body.code || '').trim();
   if (!isValidEmail(username)) {
     return res.status(400).json({ success: false, error: '\u8BF7\u8F93\u5165\u6709\u6548\u7684\u90AE\u7BB1\u5730\u5740' });
   }
   if (password.length < 6) {
     return res.status(400).json({ success: false, error: '\u5BC6\u7801\u81F3\u5C116\u4F4D' });
-  }
-  const record = verifyCodes.get(username);
-  if (!record || record.code !== code || Date.now() > record.expires) {
-    return res.status(400).json({ success: false, error: '\u9A8C\u8BC1\u7801\u65E0\u6548\u6216\u5DF2\u8FC7\u671F' });
   }
   if (userStore.users[username]) {
     return res.status(409).json({ success: false, error: '\u8BE5\u90AE\u7BB1\u5DF2\u88AB\u6CE8\u518C' });
@@ -826,7 +821,6 @@ app.post('/api/auth/register', async (req, res) => {
     console.error('Failed to save registered user:', e);
     return res.status(500).json({ success: false, error: '\u8D26\u53F7\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u670D\u52A1\u5668\u5B58\u50A8\u914D\u7F6E' });
   }
-  verifyCodes.delete(username);
   const sid = crypto.randomBytes(32).toString('hex');
   sessions.set(sid, username);
   setSessionCookie(req, res, sid);
