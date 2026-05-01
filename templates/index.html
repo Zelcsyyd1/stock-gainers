@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>A股涨幅榜 — 实时行情</title>
+  <title>涨势通｜A股盘中行情与强势股雷达</title>
   <style>
     :root{
       --bg:#e8edf6;--surface:#ffffff;--border:#cbd5e1;
@@ -929,7 +929,7 @@
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
       <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
     </svg>
-    A股&nbsp;<span>涨幅榜</span>
+    涨势通&nbsp;<span>强势股雷达</span>
   </div>
   <div class="header-right">
     <div id="market-badge" class="closed">
@@ -1039,8 +1039,8 @@
 
   <div class="field-section">
     <div class="field-title">
-      <strong>涨幅榜搜索</strong>
-      <span>在当前榜单或全市场中查找股票，并过滤下方涨幅榜列表</span>
+      <strong>涨势榜搜索</strong>
+      <span>在当前榜单或全市场中查找股票，并过滤下方强势股列表</span>
     </div>
     <div class="search-wrap">
       <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1724,7 +1724,7 @@ function renderStarButtons() {
 
 async function fetchWatchlist() {
   if (!watchlist.length) {
-    showEmpty('自选股为空，请从涨幅榜点击 ☆ 添加');
+    showEmpty('自选股为空，请从涨势榜点击 ☆ 添加');
     return;
   }
   showLoading();
@@ -1980,7 +1980,7 @@ function renderNormalTable() {
   const baseData = currentListData();
   const sorted = sortedData(baseData);
   hideAll();
-  if (!sorted.length) { showEmpty(isWatchlistMode ? '自选股为空，从涨幅榜点 ☆ 添加' : '暂无数据'); return; }
+  if (!sorted.length) { showEmpty(isWatchlistMode ? '自选股为空，从涨势榜点 ☆ 添加' : '暂无数据'); return; }
   showTable();
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
@@ -3088,7 +3088,7 @@ document.getElementById('export-btn').addEventListener('click', ()=>{
   const csv=[headers,...rows].map(r=>r.join(',')).join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
-  a.download=`${isScreenMode?'选股结果':'涨幅榜'}_${new Date().toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}).replace(/[/:]/g,'-')}.csv`;
+  a.download=`${isScreenMode?'选股结果':'涨势榜'}_${new Date().toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}).replace(/[/:]/g,'-')}.csv`;
   a.click();
 });
 

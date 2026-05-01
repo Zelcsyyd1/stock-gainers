@@ -1,7 +1,7 @@
 {
   "name": "stock-gainers",
   "version": "1.0.0",
-  "description": "A股涨幅榜",
+  "description": "涨势通｜A股盘中行情与强势股雷达",
   "main": "server.js",
   "engines": {
     "node": "24.x"

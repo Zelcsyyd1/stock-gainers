@@ -204,7 +204,7 @@ async function sendVerificationEmail(email, code) {
   await mailer.sendMail({
     from: SMTP_FROM,
     to: email,
-    subject: 'A股涨幅榜注册验证码',
+    subject: '涨势通注册验证码',
     text: `你的注册验证码是 ${code}，10分钟内有效。若不是你本人操作，请忽略这封邮件。`,
     html: `<p>你的注册验证码是 <strong style="font-size:20px">${code}</strong></p><p>10分钟内有效。若不是你本人操作，请忽略这封邮件。</p>`,
   });
@@ -1358,6 +1358,6 @@ app.get('/api/limitup', async (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n✅ 股票涨幅榜已启动！`);
+  console.log(`\n✅ 涨势通已启动！`);
   console.log(`   打开浏览器访问: http://localhost:${PORT}\n`);
 });
