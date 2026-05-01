@@ -1330,7 +1330,12 @@
     <div class="modal-body">
       <div class="auth-form">
         <input id="auth-username" type="email" placeholder="邮箱" autocomplete="email"/>
-        <input id="auth-password" type="password" placeholder="密码（至少6位）" autocomplete="current-password"/>
+        <input id="auth-password" type="password" placeholder="密码（至少8位）" autocomplete="current-password"/>
+        <div id="auth-turnstile"></div>
+        <div id="auth-code-row" style="display:none;gap:8px;align-items:center">
+          <input id="auth-code" type="text" placeholder="邮箱验证码" maxlength="6" style="flex:1" autocomplete="one-time-code"/>
+          <button id="auth-send-code" type="button" style="white-space:nowrap;min-width:96px">发送验证码</button>
+        </div>
         <div class="auth-actions">
           <button class="primary" id="auth-login">登录</button>
           <button id="auth-register">注册</button>
@@ -1352,6 +1357,7 @@ let sortCol = 'change_pct', sortDir = 'desc';
 let isScreenMode = false, isWatchlistMode = false;
 let autoScreenDone = false; // 防止同一天重复自动选股
 let currentUser = null;
+let turnstileSiteKey = null, turnstileWidgetId = null;
 const FETCH_SIZE = 300;   // 后端每次拉取总数
 const PAGE_SIZE  = 50;    // 每页显示数
 
@@ -1538,6 +1544,7 @@ async function initAuth() {
   try {
     const res = await fetch('/api/auth/me');
     const json = await res.json();
+    turnstileSiteKey = json.turnstile_site_key || null;
     if (json.success && json.user) {
       currentUser = json.user;
       if (hasProfileData(json.profile)) applyProfile(json.profile);
@@ -1558,6 +1565,7 @@ function updateAuthUI() {
 function openAuth() {
   document.getElementById('auth-overlay').style.display = 'flex';
   document.getElementById('auth-msg').textContent = '行情可免登录查看。登录后可保存自选股、筛选条件、历史记录和提醒设置。';
+  renderTurnstile();
   setTimeout(() => document.getElementById('auth-username').focus(), 50);
 }
 
@@ -1565,18 +1573,87 @@ function closeAuth() {
   document.getElementById('auth-overlay').style.display = 'none';
 }
 
+function renderTurnstile() {
+  const target = document.getElementById('auth-turnstile');
+  if (!target || !turnstileSiteKey || turnstileWidgetId !== null) return;
+  const mount = () => {
+    if (window.turnstile && turnstileWidgetId === null) {
+      turnstileWidgetId = window.turnstile.render(target, { sitekey: turnstileSiteKey });
+    }
+  };
+  if (window.turnstile) return mount();
+  if (!document.getElementById('turnstile-script')) {
+    const script = document.createElement('script');
+    script.id = 'turnstile-script';
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    script.async = true;
+    script.defer = true;
+    script.onload = mount;
+    document.head.appendChild(script);
+  }
+}
+
+function getTurnstileToken() {
+  if (!turnstileSiteKey) return '';
+  return window.turnstile && turnstileWidgetId !== null ? window.turnstile.getResponse(turnstileWidgetId) : '';
+}
+
+function resetTurnstile() {
+  if (window.turnstile && turnstileWidgetId !== null) window.turnstile.reset(turnstileWidgetId);
+}
+
+async function sendAuthCode() {
+  const email = document.getElementById('auth-username').value.trim();
+  const msg = document.getElementById('auth-msg');
+  const btn = document.getElementById('auth-send-code');
+  if (!email) { msg.textContent = '请输入邮箱'; return; }
+  if (turnstileSiteKey && !getTurnstileToken()) { msg.textContent = '请先完成人机验证'; return; }
+  btn.disabled = true;
+  msg.textContent = '验证码发送中...';
+  try {
+    const res = await fetch('/api/auth/send-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, turnstileToken: getTurnstileToken() }),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || '验证码发送失败');
+    msg.textContent = json.message || '如果邮箱可用，验证码已发送，请查收';
+    let sec = 60;
+    btn.textContent = `${sec}s`;
+    const timer = setInterval(() => {
+      sec -= 1;
+      if (sec <= 0) {
+        clearInterval(timer);
+        btn.disabled = false;
+        btn.textContent = '发送验证码';
+        resetTurnstile();
+      } else {
+        btn.textContent = `${sec}s`;
+      }
+    }, 1000);
+  } catch(e) {
+    msg.textContent = e.message;
+    btn.disabled = false;
+    resetTurnstile();
+  }
+}
+
 async function submitAuth(mode) {
   const username = document.getElementById('auth-username').value.trim();
   const password = document.getElementById('auth-password').value;
+  const code = document.getElementById('auth-code')?.value.trim() || '';
   const msg = document.getElementById('auth-msg');
   const loginBtn = document.getElementById('auth-login');
   const registerBtn = document.getElementById('auth-register');
   if (!username || !password) { msg.textContent = '请输入邮箱和密码'; return; }
-  if (password.length < 6) { msg.textContent = '密码至少6位'; return; }
+  if (mode === 'register' && password.length < 8) { msg.textContent = '密码至少8位'; return; }
+  if (mode === 'register' && !/^\d{6}$/.test(code)) { msg.textContent = '请输入6位邮箱验证码'; return; }
   msg.textContent = mode === 'register' ? '注册中...' : '登录中...';
   loginBtn.disabled = true;
   registerBtn.disabled = true;
   const body = { username, password };
+  if (mode === 'register') body.code = code;
   try {
     const res = await fetch(`/api/auth/${mode}`, {
       method: 'POST',
@@ -2198,11 +2275,24 @@ document.getElementById('auth-overlay').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeAuth();
 });
 document.getElementById('auth-login').addEventListener('click', () => {
+  document.getElementById('auth-code-row').style.display = 'none';
   submitAuth('login');
 });
 document.getElementById('auth-register').addEventListener('click', () => {
+  const row = document.getElementById('auth-code-row');
+  const code = document.getElementById('auth-code').value.trim();
+  if (row.style.display === 'none') {
+    row.style.display = 'flex';
+    sendAuthCode();
+    return;
+  }
+  if (!code) {
+    sendAuthCode();
+    return;
+  }
   submitAuth('register');
 });
+document.getElementById('auth-send-code').addEventListener('click', sendAuthCode);
 document.getElementById('auth-password').addEventListener('keydown', e => {
   if (e.key === 'Enter') submitAuth('login');
 });

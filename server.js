@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
 const { promisify } = require('util');
+const nodemailer = require('nodemailer');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
@@ -16,11 +17,31 @@ const authAttempts = new Map();
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://wcjkpexotnxkwjryflfp.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || SUPABASE_KEY || 'dev-session-secret-change-me';
+const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || '';
+const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || '';
+const SMTP_HOST = process.env.SMTP_HOST || '';
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465', 10);
+const SMTP_SECURE = String(process.env.SMTP_SECURE || 'true') === 'true';
+const SMTP_USER = process.env.SMTP_USER || '';
+const SMTP_PASS = process.env.SMTP_PASS || '';
+const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER;
 const supabase = SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 if (!supabase) console.warn('SUPABASE_KEY is not set; auth, profile sync, and history storage are disabled.');
+if (!TURNSTILE_SECRET_KEY) console.warn('TURNSTILE_SECRET_KEY is not set; registration captcha checks are disabled.');
 
 const sessions = new Map(); // legacy sid -> username
 const responseCache = new Map();
+const mailer = SMTP_HOST && SMTP_USER && SMTP_PASS
+  ? nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_SECURE,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+    })
+  : null;
 
 function cacheGet(key, ttlMs) {
   const entry = responseCache.get(key);
@@ -86,6 +107,20 @@ function getClientIp(req) {
   return String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
 }
 
+function hashIdentifier(value) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(String(value || '')).digest('hex');
+}
+
+function hashEmailCode(email, code) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(`${normalizeEmail(email)}:${code}`).digest('hex');
+}
+
+function timingSafeHexEqual(a, b) {
+  const left = Buffer.from(String(a || ''), 'hex');
+  const right = Buffer.from(String(b || ''), 'hex');
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
 function checkAuthRateLimit(req, key, maxAttempts = 12, windowMs = 10 * 60 * 1000) {
   const id = `${key}:${getClientIp(req)}`;
   const now = Date.now();
@@ -97,6 +132,82 @@ function checkAuthRateLimit(req, key, maxAttempts = 12, windowMs = 10 * 60 * 100
   entry.count += 1;
   authAttempts.set(id, entry);
   return entry.count <= maxAttempts;
+}
+
+async function countAuthEvents(action, field, value, sinceMs) {
+  if (!supabase) return 0;
+  const since = new Date(Date.now() - sinceMs).toISOString();
+  const { count, error } = await supabase
+    .from('auth_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('action', action)
+    .eq(field, value)
+    .gte('created_at', since);
+  if (error) {
+    console.warn('auth_events count failed:', error.message);
+    return 0;
+  }
+  return count || 0;
+}
+
+async function recordAuthEvent(req, action, email = '') {
+  if (!supabase) return;
+  const payload = {
+    action,
+    email_hash: email ? hashIdentifier(normalizeEmail(email)) : null,
+    ip_hash: hashIdentifier(getClientIp(req)),
+    user_agent_hash: hashIdentifier(req.headers['user-agent'] || ''),
+    created_at: new Date().toISOString(),
+  };
+  const { error } = await supabase.from('auth_events').insert(payload);
+  if (error) console.warn('auth_events insert failed:', error.message);
+}
+
+async function checkPersistentLimit(req, action, email, rules) {
+  if (!supabase) return true;
+  const emailHash = email ? hashIdentifier(normalizeEmail(email)) : null;
+  const ipHash = hashIdentifier(getClientIp(req));
+  for (const rule of rules) {
+    const field = rule.scope === 'email' ? 'email_hash' : 'ip_hash';
+    const value = rule.scope === 'email' ? emailHash : ipHash;
+    if (!value) continue;
+    const count = await countAuthEvents(action, field, value, rule.windowMs);
+    if (count >= rule.max) return false;
+  }
+  return true;
+}
+
+async function verifyTurnstile(req, token) {
+  if (!TURNSTILE_SECRET_KEY) return true;
+  if (!token) return false;
+  const body = new URLSearchParams({
+    secret: TURNSTILE_SECRET_KEY,
+    response: token,
+    remoteip: getClientIp(req),
+  });
+  try {
+    const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      body,
+      signal: AbortSignal.timeout(8000),
+    });
+    const json = await resp.json();
+    return !!json.success;
+  } catch (e) {
+    console.warn('Turnstile verification failed:', e.message);
+    return false;
+  }
+}
+
+async function sendVerificationEmail(email, code) {
+  if (!mailer) throw new Error('邮件服务未配置');
+  await mailer.sendMail({
+    from: SMTP_FROM,
+    to: email,
+    subject: 'A股涨幅榜注册验证码',
+    text: `你的注册验证码是 ${code}，10分钟内有效。若不是你本人操作，请忽略这封邮件。`,
+    html: `<p>你的注册验证码是 <strong style="font-size:20px">${code}</strong></p><p>10分钟内有效。若不是你本人操作，请忽略这封邮件。</p>`,
+  });
 }
 
 function parseCookies(req) {
@@ -769,7 +880,60 @@ app.get('/market', async (req, res) => {
 
 app.get('/api/auth/me', async (req, res) => {
   const user = await currentUser(req);
-  res.json({ success: true, user: publicUser(user), profile: user?.profile || null });
+  res.json({ success: true, user: publicUser(user), profile: user?.profile || null, turnstile_site_key: TURNSTILE_SITE_KEY || null });
+});
+
+app.post('/api/auth/send-code', async (req, res) => {
+  if (!supabase || !mailer) {
+    return res.status(503).json({ success: false, error: '账号验证服务暂不可用，行情可免登录查看' });
+  }
+  const email = normalizeEmail(req.body.email);
+  const turnstileToken = String(req.body.turnstileToken || '');
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ success: false, error: '请输入有效的邮箱地址' });
+  }
+  if (!checkAuthRateLimit(req, 'send-code', 6)) {
+    return res.status(429).json({ success: false, error: '验证码发送过于频繁，请稍后再试' });
+  }
+  if (!(await verifyTurnstile(req, turnstileToken))) {
+    return res.status(400).json({ success: false, error: '人机验证失败，请刷新后重试' });
+  }
+
+  const allowed = await checkPersistentLimit(req, 'send_code', email, [
+    { scope: 'email', max: 2, windowMs: 10 * 60 * 1000 },
+    { scope: 'ip', max: 5, windowMs: 60 * 60 * 1000 },
+  ]);
+  if (!allowed) {
+    return res.status(429).json({ success: false, error: '验证码发送过于频繁，请稍后再试' });
+  }
+
+  await recordAuthEvent(req, 'send_code', email);
+  const generic = { success: true, message: '如果邮箱可用，验证码已发送，请查收' };
+  const { data: existing } = await supabase.from('users').select('username').eq('username', email).single();
+  if (existing) return res.json(generic);
+
+  const code = String(crypto.randomInt(100000, 1000000));
+  const emailHash = hashIdentifier(email);
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  await supabase.from('email_codes').delete().eq('email_hash', emailHash);
+  const { error } = await supabase.from('email_codes').insert({
+    email_hash: emailHash,
+    code_hash: hashEmailCode(email, code),
+    expires_at: expiresAt,
+    attempts: 0,
+    created_at: new Date().toISOString(),
+  });
+  if (error) {
+    console.error('Failed to save email code:', error);
+    return res.status(500).json({ success: false, error: '验证码保存失败，请检查数据库表配置' });
+  }
+  try {
+    await sendVerificationEmail(email, code);
+  } catch (e) {
+    console.error('Failed to send verification email:', e);
+    return res.status(500).json({ success: false, error: '验证码邮件发送失败，请稍后重试' });
+  }
+  res.json(generic);
 });
 
 app.post('/api/auth/register', async (req, res) => {
@@ -779,19 +943,53 @@ app.post('/api/auth/register', async (req, res) => {
   }
   const username = normalizeEmail(req.body.username);
   const password = String(req.body.password || '');
+  const code = String(req.body.code || '').trim();
   if (!isValidEmail(username)) {
     return res.status(400).json({ success: false, error: '请输入有效的邮箱地址' });
   }
-  if (password.length < 6) {
-    return res.status(400).json({ success: false, error: '密码至少6位' });
+  if (password.length < 8) {
+    return res.status(400).json({ success: false, error: '密码至少8位' });
   }
   if (password.length > 128) {
     return res.status(400).json({ success: false, error: '密码不能超过128位' });
+  }
+  if (!/^\d{6}$/.test(code)) {
+    return res.status(400).json({ success: false, error: '请输入6位邮箱验证码' });
+  }
+  const allowed = await checkPersistentLimit(req, 'register_success', username, [
+    { scope: 'email', max: 1, windowMs: 24 * 60 * 60 * 1000 },
+    { scope: 'ip', max: 10, windowMs: 24 * 60 * 60 * 1000 },
+  ]);
+  if (!allowed) {
+    return res.status(429).json({ success: false, error: '注册过于频繁，请明天再试' });
   }
   const { data: existing } = await supabase.from('users').select('username').eq('username', username).single();
   if (existing) {
     return res.status(409).json({ success: false, error: '该邮箱已被注册' });
   }
+
+  const emailHash = hashIdentifier(username);
+  const { data: savedCode, error: codeError } = await supabase
+    .from('email_codes')
+    .select('*')
+    .eq('email_hash', emailHash)
+    .single();
+  if (codeError || !savedCode) {
+    return res.status(400).json({ success: false, error: '验证码无效或已过期，请重新发送' });
+  }
+  if (new Date(savedCode.expires_at).getTime() < Date.now()) {
+    await supabase.from('email_codes').delete().eq('email_hash', emailHash);
+    return res.status(400).json({ success: false, error: '验证码已过期，请重新发送' });
+  }
+  if ((savedCode.attempts || 0) >= 5) {
+    await supabase.from('email_codes').delete().eq('email_hash', emailHash);
+    return res.status(400).json({ success: false, error: '验证码错误次数过多，请重新发送' });
+  }
+  if (!timingSafeHexEqual(hashEmailCode(username, code), savedCode.code_hash)) {
+    await supabase.from('email_codes').update({ attempts: (savedCode.attempts || 0) + 1 }).eq('email_hash', emailHash);
+    return res.status(400).json({ success: false, error: '验证码错误' });
+  }
+
   const profile = { watchlist: [], settings: null, near_limit_range: null, theme: null };
   const nextUser = {
     username,
@@ -804,6 +1002,8 @@ app.post('/api/auth/register', async (req, res) => {
     console.error('Failed to save registered user:', error);
     return res.status(500).json({ success: false, error: '账号保存失败，请稍后重试' });
   }
+  await supabase.from('email_codes').delete().eq('email_hash', emailHash);
+  await recordAuthEvent(req, 'register_success', username);
   const sid = createSessionToken(username);
   sessions.set(sid, username);
   setSessionCookie(req, res, sid);
