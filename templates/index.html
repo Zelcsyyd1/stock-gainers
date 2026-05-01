@@ -34,6 +34,7 @@
     .hdr-icon:hover{border-color:var(--accent);color:var(--accent);}
     .hdr-icon svg{width:16px;height:16px;}
     .notif-dot{position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--red);display:none;}
+    #guest-mode-badge{font-size:12px;color:var(--muted);white-space:nowrap;}
 
     main{padding:24px;max-width:1600px;margin:0 auto;}
 
@@ -936,6 +937,7 @@
     </div>
     <div id="clock">--:--:--</div>
     <button class="icon-btn" id="auth-btn" style="min-height:34px">登录</button>
+    <span id="guest-mode-badge" title="行情可免登录查看；登录后保存自选股、筛选条件、历史记录和提醒设置">游客可看行情</span>
     <!-- 历史记录 -->
     <div class="hdr-icon" id="history-btn" title="历史选股记录">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1006,6 +1008,8 @@
 
 
   <div class="quick-filters" id="quick-filters">
+    <button class="qf-btn" data-filter="main10">主板10cm</button>
+    <button class="qf-btn" data-filter="twenty">20cm</button>
     <button class="qf-btn qf-red" data-filter="limitup">涨停股</button>
     <span class="near-limit-control" id="near-limit-control">
       <span>冲板区间</span>
@@ -1082,6 +1086,7 @@
     <div class="stat-card"><div class="label">平均涨幅</div><div class="value" id="stat-avg">--</div></div>
     <div class="stat-card"><div class="label">成交额</div><div class="value" id="stat-turnover">--</div></div>
     <div class="stat-card"><div class="label">主力净流入</div><div class="value" id="stat-inflow">--</div></div>
+    <div class="stat-card"><div class="label">数据来源</div><div class="value" id="stat-source" style="font-size:13px;margin-top:4px;color:var(--muted)">--</div></div>
     <div class="stat-card"><div class="label">更新时间</div><div class="value" id="stat-time" style="font-size:13px;margin-top:4px;color:var(--muted)">--</div></div>
   </div>
 
@@ -1547,8 +1552,10 @@ async function initAuth() {
 
 function updateAuthUI() {
   const btn = document.getElementById('auth-btn');
+  const guestBadge = document.getElementById('guest-mode-badge');
   btn.textContent = currentUser ? currentUser.username : '登录';
   btn.title = currentUser ? '点击退出登录' : '登录或注册账号';
+  if (guestBadge) guestBadge.style.display = currentUser ? 'none' : '';
 }
 
 function openAuth() {
@@ -1609,6 +1616,12 @@ function saveWatchlist() {
   localStorage.setItem('watchlist', JSON.stringify(watchlist));
   syncProfileToCloud();
 }
+function updateDataMeta(source, time) {
+  const sourceEl = document.getElementById('stat-source');
+  const timeEl = document.getElementById('stat-time');
+  if (sourceEl) sourceEl.textContent = source || '本地自选';
+  if (timeEl) timeEl.textContent = time ? String(time).slice(11) : new Date().toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai' });
+}
 function isStarred(code) { return watchlist.some(w => w.code === code); }
 function toggleStar(code, name) {
   if (isStarred(code)) {
@@ -1644,11 +1657,16 @@ async function fetchWatchlist() {
     const json = await resp.json();
     if (json.success) {
       allData = json.data;
-      document.getElementById('stat-time').textContent = new Date().toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai' });
+      updateDataMeta('自选股', null);
       renderNormalTable();
       renderStats();
+    } else {
+      showEmpty(json.error ? `自选股行情暂不可用：${json.error}` : '自选股行情暂不可用，请稍后刷新');
     }
-  } catch(e) { console.error(e); }
+  } catch(e) {
+    console.error(e);
+    showEmpty('网络异常，自选股行情加载失败');
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1665,11 +1683,18 @@ async function fetchData() {
     if (json.success) {
       allData = json.data;
       updateMarketBadge(json.market_open, json.market_status);
-      document.getElementById('stat-time').textContent = json.time.slice(11);
+      updateDataMeta(json.source, json.time);
       renderNormalTable();
       renderStats();
+    } else {
+      updateDataMeta(json.source || '数据接口', json.time);
+      showEmpty(json.error ? `数据暂不可用：${json.error}` : '数据暂不可用，请稍后刷新');
     }
-  } catch(e) { console.error(e); }
+  } catch(e) {
+    console.error(e);
+    updateDataMeta('数据接口', null);
+    showEmpty('网络异常，数据加载失败，请稍后刷新');
+  }
   finally { btn.classList.remove('spinning'); }
 }
 
@@ -1710,7 +1735,7 @@ async function runScreen() {
     const passed = json.passed || [];
 
     updateMarketBadge(json.market_open, json.market_open ? '交易中' : '已收盘');
-    document.getElementById('stat-time').textContent = (json.time || '').slice(11);
+    updateDataMeta(json.source || '选股扫描', json.time);
     document.getElementById('screen-summary').innerHTML =
       `扫描 <b style="color:var(--text)">${json.total_scanned}</b> 只 → ` +
       `初筛 <b style="color:var(--gold)">${json.total_candidates}</b> 只 → ` +
@@ -1799,7 +1824,9 @@ async function openHistory() {
     const json = await res.json();
     const history = json.history || [];
     if (!history.length) {
-      body.innerHTML = '<div id="history-empty">暂无历史记录，先运行一次选股</div>';
+      body.innerHTML = json.storage === 'disabled'
+        ? '<div id="history-empty">账号服务未配置，历史记录暂不保存；行情和选股功能可继续使用</div>'
+        : '<div id="history-empty">暂无历史记录，先运行一次选股</div>';
       return;
     }
     body.innerHTML = history.map(h => `
@@ -2877,6 +2904,8 @@ function readNearLimitRange() {
 }
 
 const QUICK_FILTERS = {
+  main10:   s => !/^(300|301|688|689)/.test(String(s.code || '')),
+  twenty:   s => /^(300|301|688|689)/.test(String(s.code || '')),
   limitup:  s => parseFloat(s.change_pct) >= 9.9,
   nearLimit:s => { const v=parseFloat(s.change_pct); const r=nearLimitRange; return v >= r.min && v < r.max; },
   inflow:   s => parseFloat(s.net_inflow) > 0,

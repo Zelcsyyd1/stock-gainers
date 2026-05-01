@@ -656,8 +656,8 @@
             进入行情页后，可以按涨幅、成交额、换手率、量比和资金数据观察市场，适合盘中快速扫榜和收盘复盘。
           </p>
           <div class="actions">
-            <a class="primary-btn" id="enter-market-btn" href="/market">进入实时行情 →</a>
-            <button class="secondary-btn" id="quick-login-btn">登录账号</button>
+            <a class="primary-btn" id="enter-market-btn" href="/market">免登录看行情 →</a>
+            <button class="secondary-btn" id="quick-login-btn">登录保存数据</button>
           </div>
         </div>
 
@@ -672,7 +672,7 @@
           </div>
           <div class="quick-stat">
             <div class="quick-value">可复盘</div>
-            <div class="quick-label">保存筛选记录</div>
+            <div class="quick-label">登录后保存筛选记录</div>
           </div>
         </div>
       </div>
@@ -812,7 +812,7 @@
             <button class="primary" id="auth-login">登录</button>
             <button id="auth-register">注册</button>
           </div>
-          <div class="auth-msg" id="auth-msg">输入邮箱和密码，直接注册或登录。</div>
+          <div class="auth-msg" id="auth-msg">行情可免登录查看。登录后可保存自选股、筛选条件、历史记录和提醒设置。</div>
         </div>
         <div class="account-panel" id="account-panel">
           <div class="auth-msg">当前已登录</div>
@@ -852,7 +852,7 @@
       if (currentUser) {
         document.getElementById('account-name').textContent = currentUser.username;
       } else {
-        document.getElementById('auth-msg').textContent = '输入邮箱和密码，直接注册或登录。';
+        document.getElementById('auth-msg').textContent = '行情可免登录查看。登录后可保存自选股、筛选条件、历史记录和提醒设置。';
         setTimeout(() => document.getElementById('auth-username').focus(), 50);
       }
     }
@@ -908,13 +908,6 @@
     document.getElementById('auth-password').addEventListener('keydown', e => {
       if (e.key === 'Enter') submitAuth('login');
     });
-    document.getElementById('enter-market-btn').addEventListener('click', e => {
-      if (!currentUser) {
-        e.preventDefault();
-        openAuth();
-      }
-    });
-
     initAuth();
 
     async function loadHomeSummary() {

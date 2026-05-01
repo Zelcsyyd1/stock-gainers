@@ -12,9 +12,30 @@ const scryptAsync = promisify(crypto.scrypt);
 // ── Supabase ─────────────────────────────────────────────────────────────
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://wcjkpexotnxkwjryflfp.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+if (!supabase) console.warn('SUPABASE_KEY is not set; auth, profile sync, and history storage are disabled.');
 
 const sessions = new Map(); // sid -> username
+const responseCache = new Map();
+
+function cacheGet(key, ttlMs) {
+  const entry = responseCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.time > ttlMs) {
+    responseCache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function cacheSet(key, value) {
+  responseCache.set(key, { time: Date.now(), value });
+  return value;
+}
+
+function cacheTtl({ open }, openMs = 15000, closedMs = 60000) {
+  return open ? openMs : closedMs;
+}
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -63,6 +84,7 @@ function clearSessionCookie(res) {
 }
 
 async function currentUser(req) {
+  if (!supabase) return null;
   const sid = parseCookies(req).sid;
   const username = sid ? sessions.get(sid) : null;
   if (!username) return null;
@@ -688,7 +710,6 @@ async function fetchIndices() {
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'templates', 'home.html')));
 app.get('/market', async (req, res) => {
-  if (!(await currentUser(req))) return res.redirect('/');
   res.sendFile(path.join(__dirname, 'templates', 'index.html'));
 });
 
@@ -698,6 +719,7 @@ app.get('/api/auth/me', async (req, res) => {
 });
 
 app.post('/api/auth/register', async (req, res) => {
+  if (!supabase) return res.status(503).json({ success: false, error: '账号服务暂不可用，行情可免登录查看' });
   const username = normalizeEmail(req.body.username);
   const password = String(req.body.password || '');
   if (!isValidEmail(username)) {
@@ -729,6 +751,7 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
+  if (!supabase) return res.status(503).json({ success: false, error: '账号服务暂不可用，行情可免登录查看' });
   const username = normalizeEmail(req.body.username);
   const password = String(req.body.password || '');
   const { data: user } = await supabase.from('users').select('*').eq('username', username).single();
@@ -749,12 +772,14 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 app.get('/api/profile', async (req, res) => {
+  if (!supabase) return res.status(503).json({ success: false, error: '账号服务暂不可用' });
   const user = await requireUser(req, res);
   if (!user) return;
   res.json({ success: true, profile: user.profile || {} });
 });
 
 app.put('/api/profile', async (req, res) => {
+  if (!supabase) return res.status(503).json({ success: false, error: '账号服务暂不可用' });
   const user = await requireUser(req, res);
   if (!user) return;
   const body = req.body || {};
@@ -777,12 +802,20 @@ app.put('/api/profile', async (req, res) => {
 });
 
 app.get('/api/stocks', async (req, res) => {
-  const board    = req.query.board || 'all';
-  const pageSize = Math.min(parseInt(req.query.size || '300'), 500);
+  const board    = FS_MAP[req.query.board] ? req.query.board : 'all';
+  const requestedSize = parseInt(req.query.size || '300', 10);
+  const pageSize = Math.max(1, Math.min(Number.isFinite(requestedSize) ? requestedSize : 300, 500));
+  const marketStatus = getMarketStatus();
+  const requestedPage = parseInt(req.query.page || '1', 10);
+  const page = Math.max(1, Number.isFinite(requestedPage) ? requestedPage : 1);
+  const cacheKey = `stocks:${board}:${pageSize}:${page}`;
+  const cached = cacheGet(cacheKey, cacheTtl(marketStatus));
+  if (cached) {
+    return res.json({ ...cached, cached: true, market_open: marketStatus.open, market_status: marketStatus.status, time: nowStr() });
+  }
   try {
     let data;
     if (pageSize <= 100) {
-      const page = parseInt(req.query.page || '1');
       data = await fetchTopGainers(page, pageSize, board);
     } else {
       // 并发拉多页（每页100条）再合并去重
@@ -796,10 +829,19 @@ app.get('/api/stocks', async (req, res) => {
         seen.add(s.code); return true;
       }).slice(0, pageSize);
     }
-    const { open, status } = getMarketStatus();
-    res.json({ success: true, data, market_open: open, market_status: status, time: nowStr(), total: data.length, source: lastDataSource });
+    const payload = {
+      success: true,
+      data,
+      market_open: marketStatus.open,
+      market_status: marketStatus.status,
+      time: nowStr(),
+      total: data.length,
+      source: lastDataSource,
+    };
+    cacheSet(cacheKey, payload);
+    res.json(payload);
   } catch (e) {
-    res.json({ success: false, error: e.message, data: [] });
+    res.json({ success: false, error: e.message, data: [], source: lastDataSource, time: nowStr() });
   }
 });
 
@@ -843,9 +885,11 @@ app.get('/api/indicators', async (req, res) => {
 
 // 大盘指数
 app.get('/api/indices', async (req, res) => {
+  const cached = cacheGet('indices', cacheTtl(getMarketStatus(), 20000, 120000));
+  if (cached) return res.json({ ...cached, cached: true });
   try {
     const data = await fetchIndices();
-    res.json({ success: true, data });
+    res.json(cacheSet('indices', { success: true, data }));
   } catch (e) {
     res.json({ success: false, error: e.message, data: [] });
   }
@@ -913,22 +957,24 @@ app.get('/api/screen', async (req, res) => {
     const time   = nowStr();
 
     // 保存历史到 Supabase
-    await supabase.from('screen_history').insert({
-      id:               Date.now(),
-      time,
-      params:           { ...params, max_cap: params.max_cap / 1e8 },
-      total_scanned:    allStocks.length,
-      total_candidates: candidates.length,
-      total_passed:     passed.length,
-      passed:           passed.map(s => ({ code: s.code, name: s.name, change_pct: s.change_pct, price: s.price })),
-    }).catch(e => console.error('Failed to save history:', e));
+    if (supabase) {
+      await supabase.from('screen_history').insert({
+        id:               Date.now(),
+        time,
+        params:           { ...params, max_cap: params.max_cap / 1e8 },
+        total_scanned:    allStocks.length,
+        total_candidates: candidates.length,
+        total_passed:     passed.length,
+        passed:           passed.map(s => ({ code: s.code, name: s.name, change_pct: s.change_pct, price: s.price })),
+      }).catch(e => console.error('Failed to save history:', e));
+    }
 
     res.json({
       success: true, passed, all_candidates: results,
       total_scanned: allStocks.length,
       total_candidates: candidates.length,
       total_passed: passed.length,
-      market_open: open, time,
+      market_open: open, time, source: lastDataSource,
     });
   } catch (e) {
     res.json({ success: false, error: e.message, passed: [], all_candidates: [] });
@@ -937,6 +983,7 @@ app.get('/api/screen', async (req, res) => {
 
 // 历史记录
 app.get('/api/history', async (req, res) => {
+  if (!supabase) return res.json({ success: true, history: [], storage: 'disabled' });
   const { data, error } = await supabase.from('screen_history').select('*').order('id', { ascending: false }).limit(100);
   if (error) return res.json({ success: false, error: error.message, history: [] });
   res.json({ success: true, history: data || [] });
@@ -987,10 +1034,13 @@ async function fetchSectors(type) {
 }
 
 app.get('/api/sectors', async (req, res) => {
-  const type = req.query.type || 'industry';
+  const type = req.query.type === 'concept' ? 'concept' : 'industry';
+  const cacheKey = `sectors:${type}`;
+  const cached = cacheGet(cacheKey, cacheTtl(getMarketStatus(), 30000, 180000));
+  if (cached) return res.json({ ...cached, cached: true });
   try {
     const data = await fetchSectors(type);
-    res.json({ success: true, data });
+    res.json(cacheSet(cacheKey, { success: true, data }));
   } catch (e) {
     res.json({ success: false, error: e.message, data: [] });
   }
@@ -998,6 +1048,8 @@ app.get('/api/sectors', async (req, res) => {
 
 // 连板梯队：返回当前涨停股及其连续涨停天数
 app.get('/api/limitup', async (req, res) => {
+  const cached = cacheGet('limitup', cacheTtl(getMarketStatus(), 30000, 180000));
+  if (cached) return res.json({ ...cached, cached: true });
   try {
     const pages = await Promise.all(
       [1, 2, 3].map(p => fetchTopGainers(p, 100, 'all').catch(() => []))
@@ -1033,7 +1085,7 @@ app.get('/api/limitup', async (req, res) => {
     }, 8);
 
     results.sort((a, b) => (b.consecutive - a.consecutive) || (parseFloat(b.change_pct) - parseFloat(a.change_pct)));
-    res.json({ success: true, data: results, total: results.length, time: nowStr() });
+    res.json(cacheSet('limitup', { success: true, data: results, total: results.length, time: nowStr() }));
   } catch (e) {
     res.json({ success: false, error: e.message, data: [] });
   }
