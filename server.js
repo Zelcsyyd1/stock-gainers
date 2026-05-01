@@ -5,17 +5,21 @@ const { promisify } = require('util');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
-app.use(express.json());
+app.set('trust proxy', 1);
+app.use(express.json({ limit: '64kb' }));
 const PORT = process.env.PORT || 5000;
 const scryptAsync = promisify(crypto.scrypt);
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+const authAttempts = new Map();
 
 // ── Supabase ─────────────────────────────────────────────────────────────
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://wcjkpexotnxkwjryflfp.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
+const SESSION_SECRET = process.env.SESSION_SECRET || SUPABASE_KEY || 'dev-session-secret-change-me';
 const supabase = SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 if (!supabase) console.warn('SUPABASE_KEY is not set; auth, profile sync, and history storage are disabled.');
 
-const sessions = new Map(); // sid -> username
+const sessions = new Map(); // legacy sid -> username
 const responseCache = new Map();
 
 function cacheGet(key, ttlMs) {
@@ -49,11 +53,61 @@ function publicUser(user) {
   return user ? { username: user.username, created_at: user.created_at } : null;
 }
 
+function base64url(input) {
+  return Buffer.from(input).toString('base64url');
+}
+
+function signSessionPayload(payload) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+}
+
+function createSessionToken(username) {
+  const payload = base64url(JSON.stringify({ username, exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000 }));
+  return `${payload}.${signSessionPayload(payload)}`;
+}
+
+function verifySessionToken(token) {
+  const [payload, signature] = String(token || '').split('.');
+  if (!payload || !signature) return null;
+  const expected = signSessionPayload(payload);
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!data.username || Date.now() > data.exp) return null;
+    return normalizeEmail(data.username);
+  } catch {
+    return null;
+  }
+}
+
+function getClientIp(req) {
+  return String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+}
+
+function checkAuthRateLimit(req, key, maxAttempts = 12, windowMs = 10 * 60 * 1000) {
+  const id = `${key}:${getClientIp(req)}`;
+  const now = Date.now();
+  const entry = authAttempts.get(id) || { count: 0, resetAt: now + windowMs };
+  if (now > entry.resetAt) {
+    entry.count = 0;
+    entry.resetAt = now + windowMs;
+  }
+  entry.count += 1;
+  authAttempts.set(id, entry);
+  return entry.count <= maxAttempts;
+}
+
 function parseCookies(req) {
   return String(req.headers.cookie || '').split(';').reduce((acc, item) => {
     const idx = item.indexOf('=');
     if (idx === -1) return acc;
-    acc[item.slice(0, idx).trim()] = decodeURIComponent(item.slice(idx + 1).trim());
+    try {
+      acc[item.slice(0, idx).trim()] = decodeURIComponent(item.slice(idx + 1).trim());
+    } catch {
+      acc[item.slice(0, idx).trim()] = '';
+    }
     return acc;
   }, {});
 }
@@ -75,7 +129,7 @@ async function verifyPassword(password, stored) {
 function setSessionCookie(req, res, sid) {
   const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
   res.setHeader('Set-Cookie', [
-    `sid=${encodeURIComponent(sid)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}${secure ? '; Secure' : ''}`,
+    `sid=${encodeURIComponent(sid)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE_SECONDS}; Priority=High${secure ? '; Secure' : ''}`,
   ]);
 }
 
@@ -86,7 +140,7 @@ function clearSessionCookie(res) {
 async function currentUser(req) {
   if (!supabase) return null;
   const sid = parseCookies(req).sid;
-  const username = sid ? sessions.get(sid) : null;
+  const username = sid ? (sessions.get(sid) || verifySessionToken(sid)) : null;
   if (!username) return null;
   const { data } = await supabase.from('users').select('*').eq('username', username).single();
   return data || null;
@@ -720,6 +774,9 @@ app.get('/api/auth/me', async (req, res) => {
 
 app.post('/api/auth/register', async (req, res) => {
   if (!supabase) return res.status(503).json({ success: false, error: '账号服务暂不可用，行情可免登录查看' });
+  if (!checkAuthRateLimit(req, 'register', 8)) {
+    return res.status(429).json({ success: false, error: '注册尝试过于频繁，请稍后再试' });
+  }
   const username = normalizeEmail(req.body.username);
   const password = String(req.body.password || '');
   if (!isValidEmail(username)) {
@@ -727,6 +784,9 @@ app.post('/api/auth/register', async (req, res) => {
   }
   if (password.length < 6) {
     return res.status(400).json({ success: false, error: '密码至少6位' });
+  }
+  if (password.length > 128) {
+    return res.status(400).json({ success: false, error: '密码不能超过128位' });
   }
   const { data: existing } = await supabase.from('users').select('username').eq('username', username).single();
   if (existing) {
@@ -744,7 +804,7 @@ app.post('/api/auth/register', async (req, res) => {
     console.error('Failed to save registered user:', error);
     return res.status(500).json({ success: false, error: '账号保存失败，请稍后重试' });
   }
-  const sid = crypto.randomBytes(32).toString('hex');
+  const sid = createSessionToken(username);
   sessions.set(sid, username);
   setSessionCookie(req, res, sid);
   res.json({ success: true, user: publicUser(nextUser), profile });
@@ -752,13 +812,19 @@ app.post('/api/auth/register', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   if (!supabase) return res.status(503).json({ success: false, error: '账号服务暂不可用，行情可免登录查看' });
+  if (!checkAuthRateLimit(req, 'login', 20)) {
+    return res.status(429).json({ success: false, error: '登录尝试过于频繁，请稍后再试' });
+  }
   const username = normalizeEmail(req.body.username);
   const password = String(req.body.password || '');
+  if (!isValidEmail(username) || !password) {
+    return res.status(400).json({ success: false, error: '请输入邮箱和密码' });
+  }
   const { data: user } = await supabase.from('users').select('*').eq('username', username).single();
   if (!user || !(await verifyPassword(password, user.password_hash))) {
     return res.status(401).json({ success: false, error: '邮箱或密码错误' });
   }
-  const sid = crypto.randomBytes(32).toString('hex');
+  const sid = createSessionToken(username);
   sessions.set(sid, username);
   setSessionCookie(req, res, sid);
   res.json({ success: true, user: publicUser(user), profile: user.profile || {} });
