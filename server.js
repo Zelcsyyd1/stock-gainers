@@ -5,9 +5,32 @@ const { promisify } = require('util');
 const nodemailer = require('nodemailer');
 const { createClient } = require('@supabase/supabase-js');
 
+function loadEnvFile(filePath = path.join(__dirname, '.env')) {
+  try {
+    const raw = require('fs').readFileSync(filePath, 'utf8');
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+      if (!match) continue;
+      const key = match[1];
+      let value = match[2].trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      if (process.env[key] === undefined) process.env[key] = value;
+    }
+  } catch (e) {
+    if (e.code !== 'ENOENT') console.warn(`Failed to load .env: ${e.message}`);
+  }
+}
+
+loadEnvFile();
+
 const app = express();
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '64kb' }));
+app.use('/static', express.static(path.join(__dirname, 'static')));
 const PORT = process.env.PORT || 5000;
 const scryptAsync = promisify(crypto.scrypt);
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -26,10 +49,17 @@ const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
 const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER;
 const supabase = SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+const missingConfig = [];
+if (!SUPABASE_KEY) missingConfig.push('SUPABASE_KEY');
+if (!process.env.SESSION_SECRET || SESSION_SECRET === 'dev-session-secret-change-me') missingConfig.push('SESSION_SECRET');
+if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) missingConfig.push('SMTP_HOST/SMTP_USER/SMTP_PASS');
+if (!TURNSTILE_SECRET_KEY || !TURNSTILE_SITE_KEY) missingConfig.push('TURNSTILE_SECRET_KEY/TURNSTILE_SITE_KEY');
+if (missingConfig.length) {
+  console.warn(`Missing optional config: ${missingConfig.join(', ')}. Run "npm run setup" to create .env.`);
+}
 if (!supabase) console.warn('SUPABASE_KEY is not set; auth, profile sync, and history storage are disabled.');
 if (!TURNSTILE_SECRET_KEY) console.warn('TURNSTILE_SECRET_KEY is not set; registration captcha checks are disabled.');
 
-const sessions = new Map(); // legacy sid -> username
 const responseCache = new Map();
 const mailer = SMTP_HOST && SMTP_USER && SMTP_PASS
   ? nodemailer.createTransport({
@@ -251,7 +281,7 @@ function clearSessionCookie(res) {
 async function currentUser(req) {
   if (!supabase) return null;
   const sid = parseCookies(req).sid;
-  const username = sid ? (sessions.get(sid) || verifySessionToken(sid)) : null;
+  const username = sid ? verifySessionToken(sid) : null;
   if (!username) return null;
   const { data } = await supabase.from('users').select('*').eq('username', username).single();
   return data || null;
@@ -1005,7 +1035,6 @@ app.post('/api/auth/register', async (req, res) => {
   await supabase.from('email_codes').delete().eq('email_hash', emailHash);
   await recordAuthEvent(req, 'register_success', username);
   const sid = createSessionToken(username);
-  sessions.set(sid, username);
   setSessionCookie(req, res, sid);
   res.json({ success: true, user: publicUser(nextUser), profile });
 });
@@ -1025,14 +1054,11 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(401).json({ success: false, error: '邮箱或密码错误' });
   }
   const sid = createSessionToken(username);
-  sessions.set(sid, username);
   setSessionCookie(req, res, sid);
   res.json({ success: true, user: publicUser(user), profile: user.profile || {} });
 });
 
 app.post('/api/auth/logout', (req, res) => {
-  const sid = parseCookies(req).sid;
-  if (sid) sessions.delete(sid);
   clearSessionCookie(res);
   res.json({ success: true });
 });
@@ -1325,7 +1351,11 @@ app.get('/api/limitup', async (req, res) => {
       if (seen.has(s.code)) return false;
       seen.add(s.code); return true;
     });
-    const limitUpStocks = allStocks.filter(s => parseFloat(s.change_pct) >= 9.9);
+    const limitUpStocks = allStocks.filter(s => {
+      const pct = parseFloat(s.change_pct);
+      const t = (s.code.startsWith('3') || s.code.startsWith('688')) ? 19.5 : 9.9;
+      return pct >= t;
+    });
 
     const results = await batchProcess(limitUpStocks, async (stock) => {
       const secid = getSecId(stock.code);
@@ -1356,6 +1386,19 @@ app.get('/api/limitup', async (req, res) => {
     res.json({ success: false, error: e.message, data: [] });
   }
 });
+
+// ── 内存清理（每10分钟） ─────────────────────────────────────────
+setInterval(() => {
+  const now = Date.now();
+  // 清理过期 authAttempts
+  for (const [key, entry] of authAttempts) {
+    if (now > entry.resetAt) authAttempts.delete(key);
+  }
+  // 清理过期 responseCache
+  for (const [key, entry] of responseCache) {
+    if (now - entry.time > 300000) responseCache.delete(key); // 5分钟上限
+  }
+}, 10 * 60 * 1000);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n✅ 涨势通已启动！`);
