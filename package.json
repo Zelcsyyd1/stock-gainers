@@ -9,8 +9,9 @@
   "scripts": {
     "setup": "node scripts/setup-env.js",
     "check-config": "node scripts/setup-env.js --check",
-    "start": "node server.js",
-    "dev": "node server.js"
+    "bundle": "node scripts/bundle.js",
+    "start": "node scripts/bundle.js && node server.js",
+    "dev": "node scripts/bundle.js && node server.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.1",

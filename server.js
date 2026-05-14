@@ -6,7 +6,7 @@ const registerRoutes = require('./routes');
 const app = express();
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '64kb' }));
-app.use('/static', express.static(path.join(__dirname, 'static')));
+app.use('/static', express.static(path.join(__dirname, 'static'), { maxAge: '1d' }));
 
 registerRoutes(app);
 
