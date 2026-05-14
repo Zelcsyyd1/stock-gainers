@@ -1,6 +1,6 @@
 const path = require('path');
 const crypto = require('crypto');
-const { supabase, cacheGet, cacheSet, cacheTtl, getMarketStatus, nowStr } = require('./config');
+const { supabase, mailer, cacheGet, cacheSet, cacheTtl, getMarketStatus, nowStr } = require('./config');
 const auth = require('./authService');
 const stock = require('./stockService');
 
@@ -17,7 +17,7 @@ module.exports = function (app) {
   });
 
   app.post('/api/auth/send-code', async (req, res) => {
-    if (!supabase || !auth.supabase) {
+    if (!supabase || !mailer) {
       return res.status(503).json({ success: false, error: '账号验证服务暂不可用，行情可免登录查看' });
     }
     const email = auth.normalizeEmail(req.body.email);
