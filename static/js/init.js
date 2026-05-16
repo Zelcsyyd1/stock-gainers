@@ -118,7 +118,7 @@ document.getElementById('refresh-btn').addEventListener('click', ()=>{
   else if(isSectorMode) fetchAndRenderSectors(currentSectorType);
   else fetchData();
 });
-document.getElementById('screen-btn').addEventListener('click', runScreen);
+document.getElementById('screen-btn')?.addEventListener('click', runScreen);
 document.getElementById('stock-drawer-close')?.addEventListener('click', closeStockDrawer);
 document.getElementById('stock-drawer-mask')?.addEventListener('click', closeStockDrawer);
 document.querySelectorAll('.tape-filter').forEach(btn => {

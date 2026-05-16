@@ -69,6 +69,7 @@
 
     function closeAuth() {
       display('auth-overlay', 'none');
+      if (forgotMode) showLoginMode();
     }
 
     function renderTurnstile() {
@@ -177,6 +178,116 @@
       }
     }
 
+    // ── Forgot / Reset Password ───────────────────────────────────────────
+    let forgotMode = false;
+
+    function showForgotMode() {
+      forgotMode = true;
+      const title = document.getElementById('auth-title');
+      if (title) title.textContent = '重置密码';
+      display('auth-code-row', codeRowDisplay);
+      const msg = document.getElementById('auth-msg');
+      if (msg) msg.textContent = '输入注册邮箱和新密码，点击发送验证码';
+      const loginBtn = document.getElementById('auth-login');
+      const registerBtn = document.getElementById('auth-register');
+      const forgotLink = document.getElementById('auth-forgot');
+      if (loginBtn) loginBtn.style.display = 'none';
+      if (registerBtn) registerBtn.style.display = 'none';
+      if (forgotLink) forgotLink.style.display = 'none';
+      const resetBtn = document.getElementById('auth-reset-btn');
+      if (resetBtn) resetBtn.style.display = '';
+      const backBtn = document.getElementById('auth-back-login');
+      if (backBtn) backBtn.style.display = '';
+    }
+
+    function showLoginMode() {
+      forgotMode = false;
+      const title = document.getElementById('auth-title');
+      if (title) title.textContent = '邮箱登录';
+      display('auth-code-row', 'none');
+      const msg = document.getElementById('auth-msg');
+      if (msg) msg.textContent = '行情可免登录查看。登录后可保存自选股、筛选条件、历史记录和提醒设置。';
+      const loginBtn = document.getElementById('auth-login');
+      const registerBtn = document.getElementById('auth-register');
+      const forgotLink = document.getElementById('auth-forgot');
+      if (loginBtn) loginBtn.style.display = '';
+      if (registerBtn) registerBtn.style.display = '';
+      if (forgotLink) forgotLink.style.display = '';
+      const resetBtn = document.getElementById('auth-reset-btn');
+      if (resetBtn) resetBtn.style.display = 'none';
+      const backBtn = document.getElementById('auth-back-login');
+      if (backBtn) backBtn.style.display = 'none';
+    }
+
+    async function sendForgotCode() {
+      const email = value('auth-username');
+      const msg = document.getElementById('auth-msg');
+      const btn = document.getElementById('auth-send-code');
+      if (!msg || !btn) return;
+      if (!email) { msg.textContent = '请输入邮箱'; return; }
+      btn.disabled = true;
+      msg.textContent = '验证码发送中...';
+      try {
+        const res = await fetch('/api/auth/forgot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error || '发送失败');
+        msg.textContent = json.message || '验证码已发送，请查收邮件';
+        let sec = 60;
+        btn.textContent = `${sec}s`;
+        const timer = setInterval(() => {
+          sec -= 1;
+          if (sec <= 0) {
+            clearInterval(timer);
+            btn.disabled = false;
+            btn.textContent = '发送验证码';
+          } else {
+            btn.textContent = `${sec}s`;
+          }
+        }, 1000);
+      } catch (e) {
+        msg.textContent = e.message;
+        btn.disabled = false;
+      }
+    }
+
+    async function submitResetPassword() {
+      const email = value('auth-username');
+      const passwordEl = document.getElementById('auth-password');
+      const password = passwordEl ? passwordEl.value : '';
+      const code = value('auth-code');
+      const msg = document.getElementById('auth-msg');
+      const resetBtn = document.getElementById('auth-reset-btn');
+      if (!msg) return;
+      if (!email) { msg.textContent = '请输入邮箱'; return; }
+      if (!password || password.length < 8) { msg.textContent = '新密码至少8位'; return; }
+      if (!/^\d{6}$/.test(code)) { msg.textContent = '请输入6位验证码'; return; }
+      if (resetBtn) resetBtn.disabled = true;
+      msg.textContent = '重置中...';
+      try {
+        const res = await fetch('/api/auth/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, code }),
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error || '重置失败');
+        setCurrentUser(json.user);
+        if (typeof options.onAuthSuccess === 'function') {
+          options.onAuthSuccess({ mode: 'reset', user: currentUser, profile: json.profile || null, json });
+        }
+        updateAuthUI();
+        closeAuth();
+      } catch (e) {
+        msg.textContent = e.message;
+      } finally {
+        if (resetBtn) resetBtn.disabled = false;
+      }
+    }
+
     async function logout() {
       await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
       setCurrentUser(null);
@@ -216,10 +327,28 @@
         submitAuth('register');
       });
       const sendBtn = document.getElementById('auth-send-code');
-      if (sendBtn) sendBtn.addEventListener('click', sendAuthCode);
+      if (sendBtn) sendBtn.addEventListener('click', () => {
+        if (forgotMode) sendForgotCode();
+        else sendAuthCode();
+      });
       const password = document.getElementById('auth-password');
       if (password) password.addEventListener('keydown', e => {
-        if (e.key === 'Enter') submitAuth('login');
+        if (e.key === 'Enter') {
+          if (forgotMode) submitResetPassword();
+          else submitAuth('login');
+        }
+      });
+      const forgotLink = document.getElementById('auth-forgot');
+      if (forgotLink) forgotLink.addEventListener('click', e => {
+        e.preventDefault();
+        showForgotMode();
+      });
+      const resetBtn = document.getElementById('auth-reset-btn');
+      if (resetBtn) resetBtn.addEventListener('click', submitResetPassword);
+      const backBtn = document.getElementById('auth-back-login');
+      if (backBtn) backBtn.addEventListener('click', e => {
+        e.preventDefault();
+        showLoginMode();
       });
     }
 

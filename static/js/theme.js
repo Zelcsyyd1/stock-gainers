@@ -28,26 +28,26 @@ const THEMES = {
   navy: {
     name:'深蓝', preview:['#060d1f','#0c1630','#ff5555','#4080ff'],
     '--bg':'#060d1f','--surface':'#0c1630','--border':'#1a2a50',
-    '--text':'#c8d8f0','--muted':'#5a7aaa','--accent':'#4080ff',
+    '--text':'#e6f0ff','--muted':'#9bb8e8','--accent':'#5b93ff',
     '--red':'#ff5555','--green':'#00c878','--gold':'#ffc040',
     '--hover-bg':'#122040','--input-bg':'#060d1f','--tab-hover':'#182038',
-    '--badge-sh-bg':'#0d2050','--badge-sh-text':'#60a0ff',
-    '--badge-sz-bg':'#0a2a30','--badge-sz-text':'#30d890',
+    '--badge-sh-bg':'#102b64','--badge-sh-text':'#9bc6ff',
+    '--badge-sz-bg':'#0d3a35','--badge-sz-text':'#72e6b2',
     '--screen-btn-bg':'linear-gradient(135deg,#0d2050,#100840)',
-    '--screen-btn-border':'#4080ff','--screen-btn-text':'#80b0ff',
+    '--screen-btn-border':'#5b93ff','--screen-btn-text':'#c6dbff',
     '--screen-banner-bg':'linear-gradient(135deg,#0a1838,#080d28)',
     '--screen-banner-border':'#2050c0',
   },
   warm: {
     name:'护眼', preview:['#1a1e0e','#232811','#f06050','#80c840'],
     '--bg':'#1a1e0e','--surface':'#232811','--border':'#343d18',
-    '--text':'#d8e8c0','--muted':'#7a9060','--accent':'#80c840',
+    '--text':'#edf7d5','--muted':'#b4ca91','--accent':'#9bd45a',
     '--red':'#f06050','--green':'#40c890','--gold':'#e8c040',
     '--hover-bg':'#2a3218','--input-bg':'#1a1e0e','--tab-hover':'#2e3820',
-    '--badge-sh-bg':'#1a2e10','--badge-sh-text':'#80c840',
-    '--badge-sz-bg':'#102a18','--badge-sz-text':'#40c890',
+    '--badge-sh-bg':'#243a15','--badge-sh-text':'#b8e878',
+    '--badge-sz-bg':'#163523','--badge-sz-text':'#80e0b0',
     '--screen-btn-bg':'linear-gradient(135deg,#1e2e10,#181e08)',
-    '--screen-btn-border':'#80c840','--screen-btn-text':'#b0e870',
+    '--screen-btn-border':'#9bd45a','--screen-btn-text':'#d8f5a0',
     '--screen-banner-bg':'linear-gradient(135deg,#1a2a0a,#101808)',
     '--screen-banner-border':'#4a7020',
   },
@@ -60,6 +60,7 @@ function applyTheme(key) {
   Object.entries(t).forEach(([k, v]) => {
     if (k.startsWith('--')) root.style.setProperty(k, v);
   });
+  if (document.body) document.body.dataset.theme = key;
   currentTheme = key;
   localStorage.setItem('theme', key);
   renderThemePicker();

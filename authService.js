@@ -156,6 +156,17 @@ async function sendVerificationEmail(email, code) {
   });
 }
 
+async function sendResetEmail(email, code) {
+  if (!mailer) throw new Error('邮件服务未配置');
+  await mailer.sendMail({
+    from: SMTP_FROM,
+    to: email,
+    subject: '涨势通密码重置验证码',
+    text: `你的密码重置验证码是 ${code}，10分钟内有效。若不是你本人操作，请忽略这封邮件。`,
+    html: `<p>你的密码重置验证码是 <strong style="font-size:20px">${code}</strong></p><p>10分钟内有效。若不是你本人操作，请忽略这封邮件。</p>`,
+  });
+}
+
 function parseCookies(req) {
   return String(req.headers.cookie || '').split(';').reduce((acc, item) => {
     const idx = item.indexOf('=');
@@ -218,7 +229,7 @@ module.exports = {
   createSessionToken, verifySessionToken,
   hashIdentifier, hashEmailCode, timingSafeHexEqual,
   checkAuthRateLimit, recordAuthEvent, checkPersistentLimit,
-  verifyTurnstile, sendVerificationEmail,
+  verifyTurnstile, sendVerificationEmail, sendResetEmail,
   parseCookies, hashPassword, verifyPassword,
   setSessionCookie, clearSessionCookie,
   currentUser, requireUser,

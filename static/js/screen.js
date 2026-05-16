@@ -4,8 +4,10 @@ async function runScreen() {
   document.getElementById('search-badge').style.display = 'none';
   stopAuto();
   const btn = document.getElementById('screen-btn');
-  btn.disabled = true;
-  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:13px;height:13px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> 筛选中…`;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:13px;height:13px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> 筛选中…`;
+  }
 
   document.getElementById('screen-banner').style.display = '';
   updateBannerConditions();
@@ -73,8 +75,11 @@ function exitScreenMode() {
   document.querySelectorAll('.qf-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('near-limit-control')?.classList.remove('active');
   document.getElementById('screen-banner').style.display = 'none';
-  document.getElementById('screen-btn').innerHTML =
-    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:13px;height:13px"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> 2:30 选股`;
+  const btn = document.getElementById('screen-btn');
+  if (btn) {
+    btn.innerHTML =
+      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:13px;height:13px"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> 2:30 选股`;
+  }
   showLoading();
   if (document.getElementById('auto-refresh').checked) startAuto();
   fetchData();

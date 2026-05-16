@@ -17,5 +17,8 @@
     "@supabase/supabase-js": "^2.105.1",
     "express": "^4.19.2",
     "nodemailer": "^8.0.7"
+  },
+  "devDependencies": {
+    "terser": "^5.47.1"
   }
 }

@@ -213,6 +213,107 @@ module.exports = function (app) {
     res.json({ success: true, user: auth.publicUser(user), profile: user.profile || {} });
   });
 
+  // ── Forgot / Reset Password ───────────────────────────────────────────
+  app.post('/api/auth/forgot', async (req, res) => {
+    if (!supabase || !mailer) {
+      return res.status(503).json({ success: false, error: '账号验证服务暂不可用' });
+    }
+    const email = auth.normalizeEmail(req.body.email);
+    if (!auth.isValidEmail(email)) {
+      return res.status(400).json({ success: false, error: '请输入有效的邮箱地址' });
+    }
+    if (!auth.checkAuthRateLimit(req, 'forgot', 6)) {
+      return res.status(429).json({ success: false, error: '操作过于频繁，请稍后再试' });
+    }
+    const allowed = await auth.checkPersistentLimit(req, 'send_reset', email, [
+      { scope: 'email', max: 3, windowMs: 10 * 60 * 1000 },
+      { scope: 'ip', max: 5, windowMs: 60 * 60 * 1000 },
+    ]);
+    if (!allowed) {
+      return res.status(429).json({ success: false, error: '重置请求过于频繁，请稍后再试' });
+    }
+    await auth.recordAuthEvent(req, 'send_reset', email);
+    const generic = { success: true, message: '如果该邮箱已注册，验证码已发送，请查收' };
+    const { data: existing } = await supabase.from('users').select('username').eq('username', email).single();
+    if (!existing) return res.json(generic);
+
+    const code = String(crypto.randomInt(100000, 1000000));
+    const emailHash = auth.hashIdentifier(email);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    await supabase.from('email_codes').delete().eq('email_hash', emailHash);
+    const { error } = await supabase.from('email_codes').insert({
+      email_hash: emailHash,
+      code_hash: auth.hashEmailCode(email, code),
+      expires_at: expiresAt,
+      attempts: 0,
+      created_at: new Date().toISOString(),
+    });
+    if (error) {
+      return res.status(500).json({ success: false, error: '验证码保存失败' });
+    }
+    try {
+      await auth.sendResetEmail(email, code);
+    } catch (e) {
+      console.error('Failed to send reset email:', e);
+      return res.status(500).json({ success: false, error: '邮件发送失败，请稍后重试' });
+    }
+    res.json(generic);
+  });
+
+  app.post('/api/auth/reset-password', async (req, res) => {
+    if (!supabase) return res.status(503).json({ success: false, error: '账号服务暂不可用' });
+    if (!auth.checkAuthRateLimit(req, 'reset-password', 10)) {
+      return res.status(429).json({ success: false, error: '操作过于频繁，请稍后再试' });
+    }
+    const email = auth.normalizeEmail(req.body.email);
+    const password = String(req.body.password || '');
+    const code = String(req.body.code || '').trim();
+    if (!auth.isValidEmail(email)) {
+      return res.status(400).json({ success: false, error: '请输入有效的邮箱地址' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ success: false, error: '密码至少8位' });
+    }
+    if (password.length > 128) {
+      return res.status(400).json({ success: false, error: '密码不能超过128位' });
+    }
+    if (!/^\d{6}$/.test(code)) {
+      return res.status(400).json({ success: false, error: '请输入6位验证码' });
+    }
+    const emailHash = auth.hashIdentifier(email);
+    const { data: savedCode } = await supabase
+      .from('email_codes').select('*').eq('email_hash', emailHash).single();
+    if (!savedCode) {
+      return res.status(400).json({ success: false, error: '验证码无效或已过期，请重新发送' });
+    }
+    if (new Date(savedCode.expires_at).getTime() < Date.now()) {
+      await supabase.from('email_codes').delete().eq('email_hash', emailHash);
+      return res.status(400).json({ success: false, error: '验证码已过期，请重新发送' });
+    }
+    if ((savedCode.attempts || 0) >= 5) {
+      await supabase.from('email_codes').delete().eq('email_hash', emailHash);
+      return res.status(400).json({ success: false, error: '验证码错误次数过多，请重新发送' });
+    }
+    if (!auth.timingSafeHexEqual(auth.hashEmailCode(email, code), savedCode.code_hash)) {
+      await supabase.from('email_codes').update({ attempts: (savedCode.attempts || 0) + 1 }).eq('email_hash', emailHash);
+      return res.status(400).json({ success: false, error: '验证码错误' });
+    }
+    const { data: user } = await supabase.from('users').select('username').eq('username', email).single();
+    if (!user) {
+      return res.status(400).json({ success: false, error: '该邮箱未注册' });
+    }
+    const newHash = await auth.hashPassword(password);
+    const { error } = await supabase.from('users').update({ password_hash: newHash }).eq('username', email);
+    if (error) {
+      return res.status(500).json({ success: false, error: '密码更新失败，请稍后重试' });
+    }
+    await supabase.from('email_codes').delete().eq('email_hash', emailHash);
+    await auth.recordAuthEvent(req, 'reset_password', email);
+    const sid = auth.createSessionToken(email);
+    auth.setSessionCookie(req, res, sid);
+    res.json({ success: true, user: auth.publicUser(user), message: '密码重置成功，已自动登录' });
+  });
+
   app.post('/api/auth/logout', (req, res) => {
     auth.clearSessionCookie(res);
     res.json({ success: true });

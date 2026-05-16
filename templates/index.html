@@ -136,7 +136,7 @@
     #clock,
     #search-input::placeholder,
     thead th{
-      color:#243044;
+      color:var(--muted);
     }
 
     /* Ratio bar */
@@ -1891,6 +1891,182 @@
       thead th{position:static;top:auto;}
       #settings-drawer{width:100vw;}
     }
+    /* Theme contrast pass: keep the four palettes readable after the workspace polish overrides. */
+    body{
+      background:var(--bg);
+      color:var(--text);
+    }
+    header,.controls,.index-card,.stat-card,.dist-bar-wrap,.table-wrap,#screen-banner,
+    .indicator-panel,#sector-panel,#chart-modal,#compare-modal,#history-modal,#auth-modal,
+    #settings-drawer,#theme-picker,.field-section,.ladder-panel{
+      background:var(--surface);
+      border-color:var(--border);
+      color:var(--text);
+    }
+    .logo,.field-title strong,.stock-name,.drawer-title,.modal-header h3,
+    .stat-card .value,.idx-price,.indicator-value,.meta-item .mv,.cmp-neutral,
+    .ladder-head strong,.ladder-name{
+      color:var(--text);
+    }
+    #clock,#guest-mode-badge,#auto-label,.label,.idx-name,.idx-extra,.page-info,
+    .stock-code,.indicator-label,.indicator-note,.chart-stock-code,.meta-item .ml,
+    .sector-col-title,.sector-leader,.lu-code,.lu-stat,.field-title span,
+    #search-input::placeholder,thead th,.cmp-slot .slot-code,.cmp-slot-empty,
+    .auth-msg,.range-row span,.screen-rule-time,.screen-rule-btn{
+      color:var(--muted);
+    }
+    #market-badge,.hdr-icon,.icon-btn,.qf-btn,.near-limit-control,.pagination button,
+    .indicator-card,.meta-item,.cmp-slot,.history-item,.lu-card,.screen-rules,
+    .search-wrap,.screen-rule-btn,.screen-rule-time{
+      background:var(--surface);
+      border-color:var(--border);
+      color:var(--text);
+    }
+    .tab-group,.sector-type-tabs,.chart-tabs,.klt-tabs{
+      background:var(--bg);
+      border-color:var(--border);
+    }
+    .tab-group button,.sector-type-btn,.chart-tab,.klt-btn{
+      color:var(--muted);
+    }
+    .tab-group button:hover,.sector-type-btn:hover,.chart-tab:hover,.klt-btn:hover{
+      background:var(--tab-hover);
+      color:var(--text);
+    }
+    .tab-group button.active,.sector-type-btn.active,.chart-tab.active,.klt-btn.active,
+    .qf-btn.active,.screen-rule-btn.active{
+      background:var(--accent);
+      border-color:var(--accent);
+      color:#fff;
+      box-shadow:none;
+    }
+    .icon-btn,.hdr-icon,.qf-btn,.near-limit-control{
+      color:var(--muted);
+    }
+    .icon-btn:hover,.hdr-icon:hover,.qf-btn:hover,.pagination button:hover:not(:disabled){
+      background:var(--hover-bg);
+      border-color:var(--accent);
+      color:var(--accent);
+    }
+    #screen-btn,#indicator-btn{
+      background:var(--screen-btn-bg);
+      border-color:var(--screen-btn-border);
+      color:var(--screen-btn-text);
+    }
+    #screen-btn:hover,#indicator-btn:hover{
+      border-color:var(--gold);
+      color:var(--screen-btn-text);
+    }
+    #market-badge{
+      background:var(--hover-bg);
+      color:var(--muted);
+    }
+    #market-badge.open{
+      background:var(--hover-bg);
+      border-color:var(--green);
+      color:var(--green);
+    }
+    #market-badge.closed{
+      border-color:var(--border);
+      color:var(--muted);
+    }
+    #search-input,#indicator-input,.auth-form input,.setting-row input[type=number],
+    .setting-row input[type=text],.setting-row input[type=time],.range-row input,
+    .near-limit-control input,.screen-rule-time input{
+      background:var(--input-bg);
+      border-color:var(--border);
+      color:var(--text);
+    }
+    table,tbody tr,tbody tr:nth-child(even),tbody tr.fail-row{
+      background:var(--surface);
+    }
+    thead th{
+      background:var(--bg);
+      border-bottom-color:var(--border);
+      color:var(--muted);
+    }
+    tbody tr{
+      border-bottom-color:var(--border);
+    }
+    tbody tr:hover{
+      background:var(--hover-bg);
+      box-shadow:none;
+    }
+    tbody tr.pass-row{
+      background:rgba(18,184,110,.10);
+    }
+    #screen-banner{
+      background:var(--screen-banner-bg);
+      border-color:var(--screen-banner-border);
+    }
+    .banner-title{
+      color:var(--text);
+    }
+    .cond-tag{
+      background:var(--hover-bg);
+      border-color:var(--border);
+      color:var(--muted);
+    }
+    .cond-tag.active{
+      background:var(--hover-bg);
+      border-color:var(--accent);
+      color:var(--accent);
+    }
+    .badge-sh{
+      background:var(--badge-sh-bg);
+      color:var(--badge-sh-text);
+    }
+    .badge-sz{
+      background:var(--badge-sz-bg);
+      color:var(--badge-sz-text);
+    }
+    .qf-btn.qf-red.active{
+      background:var(--red);
+      border-color:var(--red);
+      color:#fff;
+    }
+    .qf-btn.qf-gold.active{
+      background:var(--gold);
+      border-color:var(--gold);
+      color:#111827;
+    }
+    .near-limit-control.active{
+      background:var(--hover-bg);
+      border-color:var(--red);
+      color:var(--red);
+    }
+    .ladder-panel{
+      background:var(--surface);
+      border-color:var(--border);
+      box-shadow:none;
+    }
+    .ladder-head strong,
+    .ladder-col-title,
+    .ladder-name{
+      color:var(--text);
+    }
+    .ladder-head span,
+    .ladder-name small,
+    .ladder-panel .tape-empty{
+      color:var(--muted);
+    }
+    .ladder-col{
+      background:var(--input-bg);
+      border-color:var(--border);
+      box-shadow:none;
+    }
+    .ladder-stock{
+      border-top-color:var(--border);
+      color:var(--text);
+    }
+    .ladder-stock:hover{
+      background:var(--hover-bg);
+      border-radius:6px;
+    }
+    .ladder-col-title b,
+    .ladder-pct{
+      color:var(--red);
+    }
   </style>
 </head>
 <body>
@@ -1969,12 +2145,6 @@
           <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
         </svg>
         刷新
-      </button>
-      <button class="icon-btn" id="screen-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-        </svg>
-        2:30 选股
       </button>
     </div>
   </div>
@@ -2435,7 +2605,7 @@
 <div id="auth-overlay" style="display:none">
   <div id="auth-modal" style="width:min(420px,95vw);background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
     <div class="modal-header">
-      <h3>邮箱登录</h3>
+      <h3 id="auth-title">邮箱登录</h3>
       <button class="modal-close" id="auth-close">✕</button>
     </div>
     <div class="modal-body">
@@ -2450,6 +2620,11 @@
         <div class="auth-actions">
           <button class="primary" id="auth-login">登录</button>
           <button id="auth-register">注册</button>
+          <button class="primary" id="auth-reset-btn" style="display:none">确认重置</button>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+          <a href="#" id="auth-forgot" style="color:var(--accent);text-decoration:none;">忘记密码？</a>
+          <a href="#" id="auth-back-login" style="color:var(--accent);text-decoration:none;display:none;">返回登录</a>
         </div>
         <div class="auth-msg" id="auth-msg">行情可免登录查看。登录后可保存自选股、筛选条件、历史记录和提醒设置。</div>
       </div>
