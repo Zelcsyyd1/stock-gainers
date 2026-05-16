@@ -9,7 +9,22 @@ const FETCH_SIZE = 300;   // 后端每次拉取总数
 const PAGE_SIZE  = 50;    // 每页显示数
 
 // 默认设置
-const DEFAULT_SETTINGS = { min_pct:3, max_pct:5, max_cap:200, min_vr:1, min_tr:5, max_tr:10, browser_notif:false, auto_screen:false, webhook:'' };
+const DEFAULT_SETTINGS = {
+  min_pct: 3,
+  max_pct: 5,
+  max_cap: 200,
+  min_vr: 1,
+  min_tr: 5,
+  max_tr: 10,
+  require_limit_up_history: true,
+  require_intraday_above_avg: true,
+  require_after_time_new_high: true,
+  require_after_new_high_above_avg: true,
+  screen_time: '14:30',
+  browser_notif: false,
+  auto_screen: false,
+  webhook: '',
+};
 let settings = { ...DEFAULT_SETTINGS };
 
 let isSearchMode = false;
@@ -24,7 +39,13 @@ let compareList = [];
 let isSectorMode = false, currentSectorType = 'industry';
 
 let isLimitupMode = false;
+let isDragonTigerMode = false;
 
 let activeQuickFilter = null;
+
+let marketOverview = {};
+let marketEvents = [];
+let marketHotspots = [];
+let activeEventFilter = 'all';
 
 let currentTheme = localStorage.getItem('theme') || 'dark';

@@ -20,7 +20,7 @@ function fmtMoney(n) {
 }
 function fmtCap(n) {
   if (!n||n==='-') return '--';
-  const v=parseFloat(n); return isNaN(v)?'--':(v/1e8).toFixed(2);
+  const v=parseFloat(n); return isNaN(v)?'--':(v/1e8).toFixed(2)+'亿';
 }
 function fmtAmp(s) {
   const h=parseFloat(s.high), l=parseFloat(s.low), pc=parseFloat(s.prev_close);
@@ -34,7 +34,8 @@ function fmtPct(v) {
 }
 function fmtBigMoney(v) {
   const n = parseFloat(v);
-  if (isNaN(n) || n === 0) return '--';
+  if (isNaN(n)) return '--';
+  if (n === 0) return '0';
   const sign = n > 0 ? '+' : '';
   const abs = Math.abs(n);
   if (abs >= 1e8) return sign + (n / 1e8).toFixed(2) + '亿';
@@ -42,7 +43,10 @@ function fmtBigMoney(v) {
   return sign + n.toFixed(0);
 }
 function pctClass(v) { const n=parseFloat(v); if(isNaN(n)||n===0) return 'flat'; return n>0?'up':'down'; }
-function isLimitUp(v) { return parseFloat(v)>=9.9; }
+function isLimitUp(v, code) {
+  const threshold = (code && (/^3\d{5}$/.test(code) || /^688\d{3}$/.test(code))) ? 19.5 : 9.9;
+  return parseFloat(v) >= threshold;
+}
 
 function showToast(msg) {
   const t = document.createElement('div');

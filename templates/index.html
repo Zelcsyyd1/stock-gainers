@@ -357,6 +357,13 @@
     .near-limit-control.active{border-color:var(--red);color:var(--red);background:rgba(240,77,77,.08);font-weight:600;}
     .near-limit-control input{width:52px;height:24px;padding:2px 5px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:12px;text-align:center;font-family:inherit;}
     .near-limit-control input:focus{outline:none;border-color:var(--accent);}
+    .screen-rules{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-4px 0 16px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface);}
+    .screen-rules-label{font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap;}
+    .screen-rule-btn{padding:5px 12px;border:1px solid var(--border);border-radius:999px;background:var(--input-bg);color:var(--muted);font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;}
+    .screen-rule-btn.active{border-color:var(--gold);background:rgba(255,176,32,.14);color:var(--gold);font-weight:700;}
+    .screen-rule-btn.disabled,.screen-rule-time input:disabled{opacity:.45;cursor:not-allowed;}
+    .screen-rule-time{display:flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--border);border-radius:999px;color:var(--muted);font-size:12px;}
+    .screen-rule-time input{width:82px;height:24px;border:1px solid var(--border);border-radius:7px;background:var(--input-bg);color:var(--text);font-size:12px;font-family:inherit;text-align:center;}
 
     /* Distribution bar */
     .dist-bar-wrap{margin-bottom:16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;}
@@ -503,6 +510,482 @@
     .lu-stat{color:var(--muted);}
     .lu-stat span{color:var(--text);font-weight:600;}
     .lu-loading{text-align:center;padding:60px;color:var(--muted);}
+
+    /* Trading floor intensity */
+    .pressure-deck{
+      display:grid;
+      grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);
+      gap:14px;
+      margin:0 0 18px;
+    }
+    .pressure-main,.tape-panel{
+      position:relative;
+      overflow:hidden;
+      border:1px solid rgba(255,59,48,.24);
+      border-radius:14px;
+      background:
+        linear-gradient(180deg,rgba(19,24,33,.92),rgba(10,13,18,.96)),
+        var(--surface);
+      box-shadow:0 22px 58px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .pressure-main::before,.tape-panel::before{
+      content:'';
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      background:
+        linear-gradient(90deg,rgba(255,59,48,.08),transparent 32%,rgba(0,200,83,.08)),
+        repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 7px);
+      opacity:.66;
+    }
+    .pressure-main{
+      padding:18px;
+    }
+    .pressure-head{
+      position:relative;
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:16px;
+      z-index:1;
+    }
+    .pressure-kicker{
+      color:var(--gold);
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.12em;
+      text-transform:uppercase;
+      margin-bottom:5px;
+    }
+    .pressure-head h2{
+      font-size:22px;
+      line-height:1.15;
+      color:#f8fafc;
+      font-weight:900;
+    }
+    .pressure-state{
+      min-width:92px;
+      padding:6px 10px;
+      border:1px solid rgba(255,176,32,.34);
+      border-radius:999px;
+      color:var(--gold);
+      background:rgba(255,176,32,.10);
+      font-size:12px;
+      font-weight:800;
+      text-align:center;
+      white-space:nowrap;
+    }
+    .pressure-grid{
+      position:relative;
+      z-index:1;
+      display:grid;
+      grid-template-columns:1.35fr repeat(3,minmax(110px,.55fr));
+      gap:10px;
+    }
+    .pressure-meter,.pressure-tile{
+      border:1px solid rgba(148,163,184,.20);
+      border-radius:10px;
+      background:rgba(3,7,18,.45);
+      padding:13px;
+      min-height:84px;
+    }
+    .meter-label,.pressure-tile span{
+      display:block;
+      color:#94a3b8;
+      font-size:11px;
+      font-weight:800;
+      margin-bottom:10px;
+    }
+    .meter-track{
+      height:12px;
+      border-radius:999px;
+      overflow:hidden;
+      background:linear-gradient(90deg,rgba(0,200,83,.42),rgba(148,163,184,.20),rgba(255,59,48,.52));
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);
+    }
+    .meter-fill{
+      width:50%;
+      height:100%;
+      border-radius:999px;
+      background:linear-gradient(90deg,#ffb020,#ff3b30);
+      box-shadow:0 0 18px rgba(255,59,48,.46);
+      transition:width .45s ease;
+    }
+    .meter-readout{
+      margin-top:10px;
+      color:#f8fafc;
+      font-size:13px;
+      font-weight:800;
+      font-variant-numeric:tabular-nums;
+    }
+    .pressure-tile strong{
+      color:#f8fafc;
+      font-size:26px;
+      line-height:1;
+      font-weight:900;
+      font-variant-numeric:tabular-nums;
+    }
+    .pressure-tile.hot strong{color:var(--red);text-shadow:0 0 16px rgba(255,59,48,.44);}
+    .pressure-tile.calm strong{color:var(--green);}
+    .pressure-tile.warn strong{color:var(--gold);}
+    .hotspot-strip{
+      position:relative;
+      z-index:1;
+      display:flex;
+      gap:8px;
+      margin-top:12px;
+      overflow-x:auto;
+      padding-bottom:2px;
+    }
+    .hotspot-chip{
+      flex:0 0 auto;
+      display:grid;
+      grid-template-columns:minmax(74px,auto) auto;
+      gap:3px 8px;
+      min-width:150px;
+      padding:8px 10px;
+      border:1px solid rgba(148,163,184,.16);
+      border-radius:9px;
+      background:rgba(15,23,42,.58);
+      color:#dbeafe;
+    }
+    .hotspot-name{
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      font-size:12px;
+      font-weight:900;
+    }
+    .hotspot-pct{
+      justify-self:end;
+      font-size:12px;
+      font-weight:900;
+    }
+    .hotspot-leader{
+      grid-column:1/-1;
+      color:#94a3b8;
+      font-size:11px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .hotspot-empty{
+      color:#64748b;
+      font-size:12px;
+      padding:8px 0;
+    }
+    .tape-panel{
+      padding:14px;
+    }
+    .tape-title{
+      position:relative;
+      z-index:1;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      color:#f8fafc;
+      font-size:13px;
+      font-weight:900;
+      margin-bottom:10px;
+    }
+    .tape-title b{
+      color:var(--gold);
+      font-size:11px;
+      font-weight:900;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+    .tape-filter-row{
+      position:relative;
+      z-index:1;
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+      margin-bottom:10px;
+    }
+    .tape-filter{
+      min-height:26px;
+      padding:4px 8px;
+      border:1px solid rgba(148,163,184,.18);
+      border-radius:999px;
+      background:rgba(15,23,42,.62);
+      color:#94a3b8;
+      font-size:11px;
+      font-weight:800;
+      cursor:pointer;
+      font-family:inherit;
+    }
+    .tape-filter.active{
+      background:#ff3b30;
+      border-color:#ff3b30;
+      color:#fff;
+      box-shadow:0 0 14px rgba(255,59,48,.26);
+    }
+    .tape-list{
+      position:relative;
+      z-index:1;
+      display:grid;
+      gap:7px;
+      max-height:202px;
+      overflow:auto;
+      padding-right:2px;
+    }
+    .tape-item{
+      display:grid;
+      grid-template-columns:64px minmax(0,1fr) auto;
+      gap:9px;
+      align-items:center;
+      min-height:34px;
+      padding:7px 9px;
+      border:1px solid rgba(148,163,184,.16);
+      border-radius:8px;
+      background:rgba(15,23,42,.56);
+      color:#dbeafe;
+      animation:tapeIn .32s ease both;
+    }
+    .tape-time{
+      color:#64748b;
+      font-size:11px;
+      font-variant-numeric:tabular-nums;
+    }
+    .tape-name{
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      font-size:12px;
+      font-weight:800;
+    }
+    .tape-signal{
+      font-size:11px;
+      font-weight:900;
+      white-space:nowrap;
+    }
+    .tape-item.hot .tape-signal{color:var(--red);}
+    .tape-item.warn .tape-signal{color:var(--gold);}
+    .tape-item.down .tape-signal{color:var(--green);}
+    .tape-empty{
+      color:#64748b;
+      padding:26px 10px;
+      text-align:center;
+      font-size:12px;
+    }
+    @keyframes tapeIn{
+      from{opacity:0;transform:translateX(10px)}
+      to{opacity:1;transform:translateX(0)}
+    }
+    body.data-flash .table-wrap{
+      animation:dataFlash .7s ease;
+    }
+    @keyframes dataFlash{
+      0%{box-shadow:0 0 0 1px rgba(255,176,32,.62),0 24px 58px rgba(255,59,48,.18)}
+      100%{box-shadow:0 24px 58px rgba(0,0,0,.34)}
+    }
+    tbody tr.row-limit{
+      box-shadow:inset 4px 0 0 var(--red);
+      background:linear-gradient(90deg,rgba(255,59,48,.16),rgba(255,255,255,.03));
+    }
+    tbody tr.row-heat{
+      box-shadow:inset 4px 0 0 var(--gold);
+    }
+    .ladder-panel{
+      margin:0 0 18px;
+      padding:14px;
+      border:1px solid rgba(148,163,184,.18);
+      border-radius:14px;
+      background:linear-gradient(180deg,rgba(17,24,39,.92),rgba(9,12,18,.96));
+      box-shadow:0 18px 48px rgba(0,0,0,.30);
+    }
+    .ladder-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:12px;
+    }
+    .ladder-head strong{
+      color:#f8fafc;
+      font-size:14px;
+      font-weight:900;
+    }
+    .ladder-head span{
+      color:#94a3b8;
+      font-size:12px;
+    }
+    .ladder-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+      gap:10px;
+    }
+    .ladder-col{
+      min-height:86px;
+      padding:10px;
+      border:1px solid rgba(148,163,184,.16);
+      border-radius:10px;
+      background:rgba(15,23,42,.58);
+    }
+    .ladder-col-title{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:8px;
+      color:#f8fafc;
+      font-size:12px;
+      font-weight:900;
+    }
+    .ladder-col-title b{
+      color:var(--red);
+      font-size:12px;
+    }
+    .ladder-stock{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      padding:6px 0;
+      border-top:1px solid rgba(148,163,184,.10);
+      cursor:pointer;
+    }
+    .ladder-stock:first-of-type{
+      border-top:0;
+    }
+    .ladder-name{
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      color:#dbeafe;
+      font-size:12px;
+      font-weight:800;
+    }
+    .ladder-pct{
+      color:var(--red);
+      font-size:12px;
+      font-weight:900;
+      white-space:nowrap;
+    }
+    .stock-drawer-mask{
+      position:fixed;
+      inset:0;
+      display:none;
+      background:rgba(0,0,0,.34);
+      z-index:560;
+    }
+    .stock-drawer{
+      position:fixed;
+      top:0;
+      right:-430px;
+      width:min(420px,96vw);
+      height:100vh;
+      z-index:561;
+      padding:18px;
+      overflow-y:auto;
+      border-left:1px solid rgba(255,59,48,.24);
+      background:linear-gradient(180deg,rgba(17,24,39,.98),rgba(7,9,13,.99));
+      box-shadow:-18px 0 48px rgba(0,0,0,.45);
+      transition:right .24s ease;
+    }
+    .stock-drawer.open{
+      right:0;
+    }
+    .stock-drawer-mask.open{
+      display:block;
+    }
+    .stock-drawer-head{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:16px;
+    }
+    .stock-drawer-name{
+      color:#f8fafc;
+      font-size:20px;
+      font-weight:900;
+    }
+    .stock-drawer-code{
+      margin-top:4px;
+      color:#94a3b8;
+      font-size:12px;
+    }
+    .stock-drawer-close{
+      width:32px;
+      height:32px;
+      border:1px solid rgba(148,163,184,.20);
+      border-radius:8px;
+      background:rgba(15,23,42,.72);
+      color:#dbeafe;
+      cursor:pointer;
+    }
+    .stock-drawer-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:9px;
+      margin-bottom:14px;
+    }
+    .drawer-metric{
+      padding:10px;
+      border:1px solid rgba(148,163,184,.16);
+      border-radius:9px;
+      background:rgba(15,23,42,.58);
+    }
+    .drawer-metric span{
+      display:block;
+      color:#94a3b8;
+      font-size:11px;
+      margin-bottom:6px;
+    }
+    .drawer-metric strong{
+      color:#f8fafc;
+      font-size:17px;
+      font-weight:900;
+      font-variant-numeric:tabular-nums;
+    }
+    .drawer-section{
+      margin-top:12px;
+      padding:12px;
+      border:1px solid rgba(148,163,184,.16);
+      border-radius:10px;
+      background:rgba(15,23,42,.48);
+    }
+    .drawer-section-title{
+      color:#f8fafc;
+      font-size:12px;
+      font-weight:900;
+      margin-bottom:8px;
+    }
+    .drawer-tags{
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+    }
+    .drawer-tag{
+      padding:4px 8px;
+      border:1px solid rgba(255,176,32,.22);
+      border-radius:999px;
+      color:#ffdf8a;
+      background:rgba(255,176,32,.09);
+      font-size:11px;
+      font-weight:800;
+    }
+    .drawer-actions{
+      display:flex;
+      gap:8px;
+      margin-top:14px;
+    }
+    .drawer-actions button{
+      flex:1;
+      min-height:36px;
+      border:1px solid rgba(255,176,32,.42);
+      border-radius:9px;
+      background:linear-gradient(135deg,rgba(255,59,48,.22),rgba(255,176,32,.18));
+      color:#ffdf8a;
+      font-weight:900;
+      cursor:pointer;
+      font-family:inherit;
+    }
 
     /* Visual refresh */
     body{
@@ -904,9 +1387,498 @@
       top:auto;
     }
 
+    /* Terminal mode overrides */
+    body{
+      background:
+        linear-gradient(rgba(255,59,48,.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px),
+        radial-gradient(circle at 18% 0%, rgba(255,59,48,.16), transparent 32%),
+        radial-gradient(circle at 90% 12%, rgba(0,200,83,.10), transparent 30%),
+        #07090d;
+      background-size:42px 42px,42px 42px,auto,auto,auto;
+      color:var(--text);
+    }
+    body::before{
+      background:linear-gradient(180deg,rgba(255,255,255,.06),transparent 38%,rgba(255,59,48,.04));
+      mask-image:none;
+      opacity:.34;
+    }
+    header{
+      background:rgba(7,9,13,.92);
+      border-bottom-color:rgba(255,59,48,.22);
+      box-shadow:0 16px 38px rgba(0,0,0,.42);
+    }
+    .logo,.field-title strong,.stock-name,.drawer-title,.modal-header h3{
+      color:#f8fafc;
+    }
+    .logo svg{
+      color:#fff;
+      background:linear-gradient(135deg,#ff3b30,#ffb020);
+      box-shadow:0 0 24px rgba(255,59,48,.34);
+    }
+    .controls,.index-card,.stat-card,.dist-bar-wrap,#screen-banner,.table-wrap,
+    .indicator-panel,#sector-panel,#chart-modal,#compare-modal,#history-modal,#auth-modal,
+    #settings-drawer,#theme-picker{
+      background:linear-gradient(180deg,rgba(17,24,39,.92),rgba(9,12,18,.96));
+      border-color:rgba(148,163,184,.18);
+      box-shadow:0 18px 48px rgba(0,0,0,.34);
+    }
+    .tab-group,.sector-type-tabs,.chart-tabs,.klt-tabs{
+      background:rgba(3,7,18,.72);
+      border-color:rgba(148,163,184,.18);
+    }
+    .tab-group button.active,.sector-type-btn.active,.chart-tab.active,.klt-btn.active{
+      background:linear-gradient(135deg,#ff3b30,#ffb020);
+      color:#07090d;
+      font-weight:900;
+    }
+    .icon-btn,.hdr-icon,.qf-btn,.near-limit-control,.pagination button,
+    .indicator-card,.meta-item,.cmp-slot,.history-item,.lu-card{
+      background:rgba(15,23,42,.72);
+      border-color:rgba(148,163,184,.20);
+      color:#dbeafe;
+    }
+    .icon-btn:hover,.hdr-icon:hover,.qf-btn:hover,.pagination button:hover:not(:disabled){
+      background:rgba(255,59,48,.10);
+      border-color:rgba(255,59,48,.42);
+      color:#fff;
+    }
+    .qf-btn.active{
+      background:#ff3b30;
+      border-color:#ff3b30;
+      color:#fff;
+      box-shadow:0 0 18px rgba(255,59,48,.28);
+    }
+    #screen-btn,#indicator-btn{
+      background:linear-gradient(135deg,rgba(255,59,48,.22),rgba(255,176,32,.22));
+      border-color:rgba(255,176,32,.48);
+      color:#ffdf8a;
+    }
+    #market-badge{
+      background:rgba(15,23,42,.78);
+      border-color:rgba(148,163,184,.20);
+    }
+    .index-card::after{
+      opacity:.78;
+    }
+    thead th{
+      background:#0b1018;
+      color:#94a3b8;
+      border-bottom-color:rgba(148,163,184,.20);
+    }
+    tbody tr,tbody tr:nth-child(even){
+      background:rgba(15,23,42,.58);
+    }
+    tbody tr{
+      border-bottom-color:rgba(148,163,184,.12);
+    }
+    tbody tr:hover{
+      background:rgba(255,59,48,.09);
+      box-shadow:inset 4px 0 0 var(--red);
+    }
+    #search-input,#indicator-input,.auth-form input,.setting-row input[type=number],
+    .setting-row input[type=text],.range-row input,.near-limit-control input{
+      background:rgba(3,7,18,.62);
+      border-color:rgba(148,163,184,.20);
+      color:#f8fafc;
+    }
+    .search-wrap{
+      background:rgba(15,23,42,.72);
+      border-color:rgba(148,163,184,.20);
+    }
+    .label,.idx-name,.idx-extra,.page-info,.stock-code,.indicator-label,
+    .indicator-note,.chart-stock-code,.meta-item .ml,.sector-col-title,
+    .sector-leader,.lu-code,.lu-stat,.field-title span,#auto-label,#clock,
+    #search-input::placeholder,thead th,#guest-mode-badge{
+      color:#94a3b8;
+    }
+    .stat-card .value,.idx-price,.indicator-value,.meta-item .mv,.cmp-neutral{
+      color:#f8fafc;
+    }
+    .change-pct.up{
+      background:rgba(255,59,48,.18);
+      box-shadow:0 0 14px rgba(255,59,48,.12);
+    }
+    .change-pct.limit-up{
+      box-shadow:0 0 18px rgba(255,59,48,.42);
+    }
+    .dist-bar-wrap,#screen-banner{
+      background:linear-gradient(180deg,rgba(17,24,39,.92),rgba(9,12,18,.96));
+    }
+    .badge-sh,.badge-sz{
+      background:rgba(148,163,184,.14);
+      color:#cbd5e1;
+    }
+    /* AI workspace polish: calm professional surface, keep behavior unchanged */
+    :root{
+      --bg:#f6f7fb;
+      --surface:#ffffff;
+      --border:#e4e7ef;
+      --text:#111827;
+      --muted:#6b7280;
+      --accent:#2563eb;
+      --red:#dc2626;
+      --green:#059669;
+      --gold:#b7791f;
+      --hover-bg:#f3f6fb;
+      --input-bg:#f9fafb;
+      --tab-hover:#eef2ff;
+      --screen-btn-bg:#111827;
+      --screen-btn-border:#111827;
+      --screen-btn-text:#ffffff;
+      --screen-banner-bg:#f8fafc;
+      --screen-banner-border:#dbe3ef;
+    }
+    body{
+      background:#f6f7fb;
+      background-image:none;
+      color:var(--text);
+      letter-spacing:0;
+    }
+    body::before{display:none;}
+    header{
+      height:64px;
+      padding:0 28px;
+      background:rgba(255,255,255,.92);
+      border-bottom:1px solid rgba(226,232,240,.9);
+      box-shadow:none;
+      backdrop-filter:blur(16px);
+    }
+    main{
+      max-width:1480px;
+      padding:22px 24px 32px;
+    }
+    .logo,.field-title strong,.stock-name,.drawer-title,.modal-header h3{
+      color:var(--text);
+    }
+    .logo{
+      font-size:17px;
+      font-weight:750;
+    }
+    .logo span{color:var(--accent);}
+    .logo svg{
+      width:28px;
+      height:28px;
+      padding:6px;
+      color:#fff;
+      background:#111827;
+      border-radius:8px;
+      box-shadow:none;
+    }
+    #market-badge,.hdr-icon,.icon-btn,.qf-btn,.near-limit-control,.screen-rules,
+    .index-card,.stat-card,.dist-bar-wrap,.table-wrap,#screen-banner,.indicator-panel,
+    #sector-panel,#chart-modal,#compare-modal,#history-modal,#auth-modal,#settings-drawer,
+    #theme-picker,.pressure-deck,.ladder-panel{
+      background:var(--surface);
+      border-color:var(--border);
+      box-shadow:none;
+    }
+    #market-badge{
+      min-height:32px;
+      background:#f8fafc;
+      color:var(--muted);
+    }
+    #market-badge.open{
+      border-color:#bbf7d0;
+      color:var(--green);
+      background:#f0fdf4;
+    }
+    #clock,#guest-mode-badge,#auto-label,.label,.idx-name,.idx-extra,.page-info,
+    .stock-code,.indicator-label,.indicator-note,.chart-stock-code,.meta-item .ml,
+    .sector-col-title,.sector-leader,.lu-code,.lu-stat,.field-title span,
+    #search-input::placeholder,thead th{
+      color:var(--muted);
+    }
+    .controls{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      margin-bottom:16px;
+      padding:10px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:#fff;
+      box-shadow:none;
+    }
+    .tab-group,.sector-type-tabs,.chart-tabs,.klt-tabs{
+      background:#f3f4f6;
+      border:1px solid #e5e7eb;
+      border-radius:9px;
+      padding:3px;
+      gap:2px;
+      overflow:visible;
+    }
+    .tab-group button,.sector-type-btn,.chart-tab,.klt-btn{
+      border:0;
+      border-radius:7px;
+      color:#4b5563;
+      font-weight:600;
+    }
+    .tab-group button.active,.sector-type-btn.active,.chart-tab.active,.klt-btn.active{
+      background:#fff;
+      color:#111827;
+      box-shadow:0 1px 3px rgba(15,23,42,.08);
+      font-weight:700;
+    }
+    .controls-right{gap:8px;}
+    .icon-btn,.hdr-icon{
+      background:#fff;
+      color:#4b5563;
+      border-color:#e5e7eb;
+      border-radius:9px;
+      font-weight:650;
+      box-shadow:none;
+    }
+    .icon-btn:hover,.hdr-icon:hover,.qf-btn:hover,.pagination button:hover:not(:disabled){
+      background:#f8fafc;
+      border-color:#cbd5e1;
+      color:#111827;
+    }
+    #screen-btn,#indicator-btn{
+      background:#111827;
+      border-color:#111827;
+      color:#fff;
+      box-shadow:none;
+    }
+    #screen-btn:hover,#indicator-btn:hover{
+      background:#1f2937;
+      border-color:#1f2937;
+      color:#fff;
+    }
+    .quick-filters{
+      gap:8px;
+      margin-bottom:12px;
+    }
+    .qf-btn,.near-limit-control{
+      min-height:30px;
+      background:#fff;
+      color:#4b5563;
+      border-color:#e5e7eb;
+      border-radius:999px;
+      box-shadow:none;
+    }
+    .qf-btn.active{
+      background:#eff6ff;
+      border-color:#bfdbfe;
+      color:#1d4ed8;
+      box-shadow:none;
+    }
+    .qf-btn.qf-red.active{
+      background:#fef2f2;
+      border-color:#fecaca;
+      color:var(--red);
+    }
+    .near-limit-control.active{
+      background:#fff7ed;
+      border-color:#fed7aa;
+      color:#c2410c;
+    }
+    .screen-rules{
+      margin:0 0 18px;
+      padding:10px 12px;
+      border-radius:12px;
+      gap:8px;
+    }
+    .screen-rules-label{
+      color:#374151;
+      font-weight:750;
+    }
+    .screen-rule-btn{
+      min-height:30px;
+      background:#f9fafb;
+      border-color:#e5e7eb;
+      color:#6b7280;
+      border-radius:999px;
+      font-weight:650;
+    }
+    .screen-rule-btn.active{
+      background:#eef2ff;
+      border-color:#c7d2fe;
+      color:#3730a3;
+    }
+    .screen-rule-time{
+      background:#f9fafb;
+      border-color:#e5e7eb;
+      border-radius:999px;
+      color:#6b7280;
+    }
+    .screen-rule-time input,.near-limit-control input,#search-input,#indicator-input,
+    .auth-form input,.setting-row input[type=number],.setting-row input[type=text],
+    .setting-row input[type=time],.range-row input{
+      background:#fff;
+      border-color:#d1d5db;
+      color:#111827;
+    }
+    .field-section{
+      background:#fff;
+      border:1px solid var(--border);
+      border-radius:12px;
+      box-shadow:none;
+    }
+    .field-title strong{
+      font-size:14px;
+    }
+    .search-wrap{
+      background:#fff;
+      border-color:#dbe3ef;
+      border-radius:10px;
+      box-shadow:none;
+    }
+    .index-bar,.stats-bar{
+      gap:10px;
+    }
+    .index-card,.stat-card{
+      border-radius:12px;
+      background:#fff;
+      transition:border-color .16s, transform .16s;
+    }
+    .index-card:hover,.stat-card:hover{
+      border-color:#cbd5e1;
+      transform:translateY(-1px);
+    }
+    .stat-card .value,.idx-price,.indicator-value,.meta-item .mv,.cmp-neutral{
+      color:#111827;
+    }
+    .up,.change-pct.up{color:var(--red);}
+    .down,.change-pct.down{color:var(--green);}
+    .change-pct{
+      border-radius:999px;
+      font-weight:750;
+    }
+    .change-pct.up{
+      background:#fef2f2;
+      box-shadow:none;
+    }
+    .change-pct.down{
+      background:#ecfdf5;
+      box-shadow:none;
+    }
+    .change-pct.limit-up{
+      background:var(--red)!important;
+      box-shadow:none;
+    }
+    .pressure-deck{
+      background:#111827;
+      border-color:#111827;
+      border-radius:14px;
+      box-shadow:none;
+    }
+    .pressure-main,.tape-panel{
+      background:transparent;
+    }
+    .pressure-kicker,.tape-time,.hotspot-leader,.tape-empty{
+      color:#9ca3af;
+    }
+    .pressure-head h2,.tape-title,.pressure-tile strong{
+      color:#f9fafb;
+    }
+    .pressure-tile,.pressure-meter,.hotspot-chip,.tape-item,.ladder-col{
+      background:rgba(255,255,255,.06);
+      border-color:rgba(255,255,255,.12);
+      box-shadow:none;
+    }
+    .tape-filter{
+      background:rgba(255,255,255,.08);
+      border-color:rgba(255,255,255,.12);
+      color:#d1d5db;
+    }
+    .tape-filter.active{
+      background:#fff;
+      border-color:#fff;
+      color:#111827;
+      box-shadow:none;
+    }
+    .ladder-panel{
+      background:#fff;
+      border-color:var(--border);
+      border-radius:12px;
+    }
+    .ladder-head strong,.ladder-name{
+      color:#111827;
+    }
+    .ladder-col{
+      background:#f9fafb;
+      border-color:#e5e7eb;
+    }
+    .table-wrap{
+      border-radius:12px;
+      background:#fff;
+      overflow:auto;
+    }
+    table{
+      background:#fff;
+    }
+    thead th{
+      background:#f9fafb;
+      color:#6b7280;
+      border-bottom:1px solid #e5e7eb;
+      font-weight:700;
+      letter-spacing:0;
+    }
+    tbody tr,tbody tr:nth-child(even){
+      background:#fff;
+    }
+    tbody tr{
+      border-bottom:1px solid #eef2f7;
+    }
+    tbody tr:hover{
+      background:#f8fafc;
+      box-shadow:none;
+    }
+    tbody tr.pass-row{
+      background:#f0fdf4;
+    }
+    tbody tr.fail-row{
+      opacity:.72;
+      background:#fff;
+    }
+    .badge-sh{
+      background:#eff6ff;
+      color:#2563eb;
+    }
+    .badge-sz{
+      background:#ecfdf5;
+      color:#059669;
+    }
+    #screen-banner{
+      background:#f8fafc;
+      border-color:#dbe3ef;
+      border-radius:12px;
+    }
+    .banner-title{
+      color:#111827;
+    }
+    .cond-tag.active{
+      background:#eef2ff;
+      border-color:#c7d2fe;
+      color:#3730a3;
+    }
+    #settings-overlay,#history-overlay,#auth-overlay,#chart-overlay,#compare-overlay{
+      background:rgba(15,23,42,.45);
+      backdrop-filter:blur(4px);
+    }
+    #settings-drawer,#history-modal,#auth-modal,#chart-modal,#compare-modal{
+      background:#fff;
+      border-color:#e5e7eb;
+      box-shadow:0 24px 70px rgba(15,23,42,.18);
+    }
+    .modal-header{
+      border-bottom-color:#eef2f7;
+    }
+
+    @media(max-width:980px){
+      .pressure-deck{grid-template-columns:1fr;}
+      .pressure-grid{grid-template-columns:1fr 1fr;}
+      .pressure-meter{grid-column:1/-1;}
+      .hotspot-chip{min-width:138px;}
+    }
+
     @media(max-width:768px){
       header{padding:10px 12px;}
       main{padding:14px;}
+      .pressure-grid{grid-template-columns:1fr;}
+      .tape-item{grid-template-columns:52px minmax(0,1fr);}
+      .tape-signal{grid-column:2;}
       .controls{grid-template-columns:1fr;padding:10px;border-radius:12px;}
       .tab-group{width:100%;overflow-x:auto;}
       .controls-right{width:100%;min-width:0;margin-left:0;justify-content:flex-start;flex-wrap:wrap;}
@@ -978,6 +1950,7 @@
       <button data-board="watchlist">⭐ 自选股</button>
       <button data-board="limitup">🔥 连板</button>
       <button data-board="sectors">📊 板块</button>
+      <button data-board="dragontiger">🐉 龙虎榜</button>
     </div>
     <div class="controls-right">
       <label id="auto-label">
@@ -1022,6 +1995,18 @@
     <button class="qf-btn" data-filter="clear">清空筛选</button>
   </div>
 
+  <div class="screen-rules" id="screen-rules">
+    <span class="screen-rules-label">2:30组件</span>
+    <button class="screen-rule-btn active" data-setting="require_limit_up_history" id="screen-rule-limit">30日涨停</button>
+    <button class="screen-rule-btn active" data-setting="require_intraday_above_avg" id="screen-rule-avg">分时均线</button>
+    <span class="screen-rule-time">
+      <span>时间</span>
+      <input id="screen-rule-time" type="time" value="14:30" min="09:30" max="15:00" step="60"/>
+    </span>
+    <button class="screen-rule-btn active" data-setting="require_after_time_new_high" id="screen-rule-new-high">破新高</button>
+    <button class="screen-rule-btn active" data-setting="require_after_new_high_above_avg" id="screen-rule-hold">破高守均线</button>
+  </div>
+
   <div class="field-section">
     <div class="field-title">
       <strong>股票指标查询</strong>
@@ -1061,6 +2046,67 @@
     <div class="index-card" id="idx-399006"><div class="idx-name">创业板指</div><div class="idx-price">--</div><div class="idx-change">--</div><div class="idx-extra">--</div></div>
     <div class="index-card" id="idx-000688"><div class="idx-name">科创50</div><div class="idx-price">--</div><div class="idx-change">--</div><div class="idx-extra">--</div></div>
   </div>
+
+  <section class="pressure-deck" id="pressure-deck" aria-label="盘中压力台">
+    <div class="pressure-main">
+      <div class="pressure-head">
+        <div>
+          <div class="pressure-kicker">Intraday Command</div>
+          <h2>盘中压力台</h2>
+        </div>
+        <div class="pressure-state" id="pressure-state">等待行情</div>
+      </div>
+      <div class="pressure-grid">
+        <div class="pressure-meter">
+          <div class="meter-label">多空压强</div>
+          <div class="meter-track">
+            <div class="meter-fill" id="pressure-meter-fill"></div>
+          </div>
+          <div class="meter-readout" id="pressure-meter-text">--</div>
+        </div>
+        <div class="pressure-tile">
+          <span>涨停火力</span>
+          <strong id="pressure-limit">--</strong>
+        </div>
+        <div class="pressure-tile">
+          <span>强势股</span>
+          <strong id="pressure-strong">--</strong>
+        </div>
+        <div class="pressure-tile">
+          <span>回撤风险</span>
+          <strong id="pressure-risk">--</strong>
+        </div>
+      </div>
+      <div class="hotspot-strip" id="hotspot-strip">
+        <div class="hotspot-empty">等待板块热区</div>
+      </div>
+    </div>
+    <aside class="tape-panel">
+      <div class="tape-title">
+        <span>盘中异动</span>
+        <b id="tape-count">--</b>
+      </div>
+      <div class="tape-filter-row" id="tape-filter-row">
+        <button class="tape-filter active" data-type="all">全部</button>
+        <button class="tape-filter" data-type="limit_up">封板</button>
+        <button class="tape-filter" data-type="broken_limit">炸板</button>
+        <button class="tape-filter" data-type="rapid_rise">急拉</button>
+        <button class="tape-filter" data-type="rapid_fall">跳水</button>
+        <button class="tape-filter" data-type="volume_spike">放量</button>
+      </div>
+      <div class="tape-list" id="tape-list">
+        <div class="tape-empty">等待行情刷新</div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="ladder-panel" id="ladder-panel">
+    <div class="ladder-head">
+      <strong>涨停梯队</strong>
+      <span id="ladder-summary">等待行情刷新</span>
+    </div>
+    <div class="ladder-grid" id="ladder-grid"></div>
+  </section>
 
   <div id="screen-banner">
     <div class="banner-title">★ 2:30 选股条件</div>
@@ -1153,6 +2199,12 @@
   <div class="limitup-grid" id="limitup-grid"></div>
 </div>
 
+<!-- Dragon Tiger Board -->
+<div id="dragon-tiger-board" style="display:none">
+  <div class="dt-loading" id="dt-loading"><div class="spinner"></div><div style="margin-top:8px">正在加载龙虎榜数据...</div></div>
+  <div id="dt-grid" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:auto;box-shadow:0 24px 58px rgba(47,63,92,.16)"></div>
+</div>
+
 <!-- Sector Panel -->
 <div id="sector-board" style="display:none">
   <div id="sector-panel">
@@ -1207,6 +2259,30 @@
     </div>
   </div>
 </div>
+
+<div class="stock-drawer-mask" id="stock-drawer-mask"></div>
+<aside class="stock-drawer" id="stock-drawer">
+  <div class="stock-drawer-head">
+    <div>
+      <div class="stock-drawer-name" id="drawer-name">--</div>
+      <div class="stock-drawer-code" id="drawer-code">--</div>
+    </div>
+    <button class="stock-drawer-close" id="stock-drawer-close">×</button>
+  </div>
+  <div class="stock-drawer-grid" id="stock-drawer-grid"></div>
+  <div class="drawer-section">
+    <div class="drawer-section-title">交易员观察</div>
+    <div class="drawer-tags" id="drawer-tags"></div>
+  </div>
+  <div class="drawer-section">
+    <div class="drawer-section-title">所属与联动</div>
+    <div id="drawer-sector-note" style="color:var(--muted);font-size:12px;line-height:1.6">后端详情接口接入后显示板块、同板块龙头和涨停历史。</div>
+  </div>
+  <div class="drawer-actions">
+    <button id="drawer-chart-btn">打开K线</button>
+    <button id="drawer-watch-btn">加入自选</button>
+  </div>
+</aside>
 
 <!-- Floating Compare Bar -->
 <div id="compare-bar">
@@ -1275,6 +2351,42 @@
       <input type="number" id="s-min-tr" value="5" min="0" max="50" step="0.5"/>
       <span>~</span>
       <input type="number" id="s-max-tr" value="10" min="0" max="50" step="0.5"/>
+    </div>
+  </div>
+
+  <div class="setting-section">
+    <h4>选股条件开关</h4>
+    <div class="toggle-row">
+      <label>近30日有涨停</label>
+      <label class="toggle">
+        <input type="checkbox" id="s-require-limit-history" checked/>
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+    <div class="toggle-row">
+      <label>分时不破均线</label>
+      <label class="toggle">
+        <input type="checkbox" id="s-require-intraday-avg" checked/>
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+    <div class="setting-row">
+      <label>尾盘时间</label>
+      <input type="time" id="s-screen-time" value="14:30" min="09:30" max="15:00" step="60"/>
+    </div>
+    <div class="toggle-row">
+      <label>指定时间后破新高</label>
+      <label class="toggle">
+        <input type="checkbox" id="s-require-new-high" checked/>
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+    <div class="toggle-row">
+      <label>破新高后不破均线</label>
+      <label class="toggle">
+        <input type="checkbox" id="s-require-new-high-hold" checked/>
+        <span class="slider-toggle"></span>
+      </label>
     </div>
   </div>
 

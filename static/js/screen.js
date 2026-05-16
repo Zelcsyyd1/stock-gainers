@@ -17,6 +17,11 @@ async function runScreen() {
       min_pct: settings.min_pct, max_pct: settings.max_pct,
       max_cap: settings.max_cap, min_vr: settings.min_vr,
       min_tr: settings.min_tr,  max_tr: settings.max_tr,
+      require_limit_up_history: settings.require_limit_up_history !== false,
+      require_intraday_above_avg: settings.require_intraday_above_avg !== false,
+      require_after_time_new_high: settings.require_after_time_new_high !== false,
+      require_after_new_high_above_avg: settings.require_after_new_high_above_avg !== false,
+      screen_time: settings.screen_time || '14:30',
     });
     const res = await fetch(`/api/screen?${q}`);
     const json = await res.json();
@@ -47,14 +52,18 @@ async function runScreen() {
 }
 
 function updateBannerConditions() {
-  document.getElementById('banner-conditions').innerHTML = [
+  const activeConditions = [
     `涨幅 ${settings.min_pct}%-${settings.max_pct}%`,
-    `30日有涨停`,
     `市值 < ${settings.max_cap}亿`,
     `量比 > ${settings.min_vr}`,
     `换手率 ${settings.min_tr}%-${settings.max_tr}%`,
-    `分时均线条件`,
-  ].map(t => `<span class="cond-tag active">${t}</span>`).join('');
+  ];
+  if (settings.require_limit_up_history !== false) activeConditions.push('30日有涨停');
+  if (settings.require_intraday_above_avg !== false) activeConditions.push('分时不破均线');
+  if (settings.require_after_time_new_high !== false) activeConditions.push(`${settings.screen_time || '14:30'} 后破新高`);
+  if (settings.require_after_time_new_high !== false && settings.require_after_new_high_above_avg !== false) activeConditions.push('破新高后不破均线');
+  document.getElementById('banner-conditions').innerHTML =
+    activeConditions.map(t => `<span class="cond-tag active">${t}</span>`).join('');
 }
 
 function exitScreenMode() {

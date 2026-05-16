@@ -17,8 +17,10 @@ function startClockAndAutoScreenCheck() {
     const ss = String(bj.getSeconds()).padStart(2,'0');
     document.getElementById('clock').textContent = `北京 ${hh}:${mm}:${ss}`;
 
-    // 14:30 自动选股
-    if (settings.auto_screen && bj.getHours() === 14 && bj.getMinutes() === 30 && bj.getSeconds() < 5) {
+    // 按组件里的时间自动选股
+    const screenTime = normalizeScreenTime(settings.screen_time);
+    const target = screenTime.split(':').map(n => parseInt(n, 10));
+    if (settings.auto_screen && bj.getHours() === target[0] && bj.getMinutes() === target[1] && bj.getSeconds() < 5) {
       const today = `${bj.getFullYear()}-${bj.getMonth()+1}-${bj.getDate()}`;
       if (autoScreenDone !== today) {
         autoScreenDone = today;
@@ -48,6 +50,7 @@ document.querySelectorAll('#board-tabs button').forEach(btn => {
     if (isScreenMode) exitScreenMode();
     if (isLimitupMode) exitLimitupMode();
     if (isSectorMode) exitSectorMode();
+    if (isDragonTigerMode) exitDragonTigerMode();
     document.querySelectorAll('#board-tabs button').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     const b = btn.dataset.board;
@@ -60,6 +63,16 @@ document.querySelectorAll('#board-tabs button').forEach(btn => {
       document.querySelector('.table-wrap').style.display = 'none';
       document.getElementById('dist-bar-wrap').style.display = 'none';
       fetchLimitup();
+      return;
+    }
+
+    if (b === 'dragontiger') {
+      stopAuto();
+      document.querySelector('.table-wrap').style.display = 'none';
+      document.getElementById('dist-bar-wrap').style.display = 'none';
+      document.getElementById('limitup-board').style.display = 'none';
+      document.getElementById('sector-board').style.display = 'none';
+      fetchDragonTiger();
       return;
     }
 
@@ -106,11 +119,21 @@ document.getElementById('refresh-btn').addEventListener('click', ()=>{
   else fetchData();
 });
 document.getElementById('screen-btn').addEventListener('click', runScreen);
+document.getElementById('stock-drawer-close')?.addEventListener('click', closeStockDrawer);
+document.getElementById('stock-drawer-mask')?.addEventListener('click', closeStockDrawer);
+document.querySelectorAll('.tape-filter').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeEventFilter = btn.dataset.type || 'all';
+    document.querySelectorAll('.tape-filter').forEach(b => b.classList.toggle('active', b === btn));
+    renderPressureTape(currentListData().filter(s=>!isNaN(parseFloat(s.change_pct))));
+  });
+});
 document.getElementById('settings-btn').addEventListener('click', openSettings);
 document.getElementById('settings-close').addEventListener('click', closeSettings);
 document.getElementById('settings-overlay').addEventListener('click', closeSettings);
 document.getElementById('settings-save').addEventListener('click', saveSettings);
 document.getElementById('settings-reset').addEventListener('click', resetSettings);
+bindScreenRuleControls();
 document.getElementById('history-btn').addEventListener('click', openHistory);
 document.getElementById('history-close').addEventListener('click', closeHistory);
 document.getElementById('history-overlay').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeHistory(); });

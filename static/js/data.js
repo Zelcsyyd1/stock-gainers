@@ -8,10 +8,16 @@ async function fetchData() {
     const json = await res.json();
     if (json.success) {
       allData = json.data;
+      marketOverview = extractMarketOverview(json);
+      await fetchPressureDeckFeeds();
       updateMarketBadge(json.market_open, json.market_status);
       updateDataMeta(json.source, json.time);
       renderNormalTable();
       renderStats();
+      document.body.classList.remove('data-flash');
+      void document.body.offsetWidth;
+      document.body.classList.add('data-flash');
+      setTimeout(()=>document.body.classList.remove('data-flash'), 800);
     } else {
       updateDataMeta(json.source || '数据接口', json.time);
       showEmpty(json.error ? `数据暂不可用：${json.error}` : '数据暂不可用，请稍后刷新');
@@ -22,6 +28,41 @@ async function fetchData() {
     showEmpty('网络异常，数据加载失败，请稍后刷新');
   }
   finally { btn.classList.remove('spinning'); }
+}
+
+function extractMarketOverview(json) {
+  const keys = [
+    'limit_up_count',
+    'limit_down_count',
+    'broken_limit_count',
+    'broken_limit_rate',
+    'highest_board',
+    'up_count',
+    'down_count',
+    'flat_count',
+    'avg_change_pct',
+    'median_change_pct',
+    'sentiment_score',
+    'market_sentiment',
+    'last_update_ts',
+  ];
+  return keys.reduce((acc, key) => {
+    if (json[key] !== undefined && json[key] !== null) acc[key] = json[key];
+    return acc;
+  }, {});
+}
+
+async function fetchPressureDeckFeeds() {
+  const [eventsResult, hotspotsResult] = await Promise.allSettled([
+    fetch('/api/market-events?limit=30').then(res => res.ok ? res.json() : null),
+    fetch('/api/market-hotspots').then(res => res.ok ? res.json() : null),
+  ]);
+
+  const eventsJson = eventsResult.status === 'fulfilled' ? eventsResult.value : null;
+  marketEvents = eventsJson?.success && Array.isArray(eventsJson.events) ? eventsJson.events : [];
+
+  const hotspotsJson = hotspotsResult.status === 'fulfilled' ? hotspotsResult.value : null;
+  marketHotspots = hotspotsJson?.success && Array.isArray(hotspotsJson.hotspots) ? hotspotsJson.hotspots : [];
 }
 
 function updateMarketBadge(open, status) {

@@ -15,6 +15,50 @@ async function openChart(code, name, price, pct) {
   pctEl.textContent  = (pc>0?'+':'')+pc.toFixed(2)+'%';
   pctEl.className    = 'chart-pct change-pct ' + (pc>=9.9?'limit-up':pc>0?'up':pc<0?'down':'flat');
   document.getElementById('chart-meta').innerHTML = '';
+  // Ensure extra sections exist
+  let mfSection = document.getElementById('money-flow-section');
+  if (!mfSection) {
+    mfSection = document.createElement('div');
+    mfSection.id = 'money-flow-section';
+    mfSection.style.cssText = 'margin-bottom:10px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px';
+    document.getElementById('chart-meta').parentNode.insertBefore(mfSection, document.getElementById('chart-svg-wrap'));
+  }
+  mfSection.style.display = 'none';
+  mfSection.innerHTML = '';
+
+  let auctionSection = document.getElementById('auction-section');
+  if (!auctionSection) {
+    auctionSection = document.createElement('div');
+    auctionSection.id = 'auction-section';
+    auctionSection.style.cssText = 'margin-bottom:10px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px';
+    document.getElementById('chart-meta').parentNode.insertBefore(auctionSection, mfSection);
+  }
+  auctionSection.style.display = 'none';
+  auctionSection.innerHTML = '';
+
+  let slSection = document.getElementById('sector-link-section');
+  if (!slSection) {
+    slSection = document.createElement('div');
+    slSection.id = 'sector-link-section';
+    slSection.style.cssText = 'margin-top:10px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px';
+    const chartBody = document.querySelector('#chart-modal .chart-body');
+    chartBody.appendChild(slSection);
+  }
+  slSection.style.display = 'none';
+  slSection.innerHTML = '';
+
+  // Ensure tech indicator toggles container
+  let techToggles = document.getElementById('tech-toggles');
+  if (!techToggles) {
+    techToggles = document.createElement('div');
+    techToggles.id = 'tech-toggles';
+    techToggles.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px';
+    const kltTabs = document.getElementById('klt-tabs');
+    kltTabs.parentNode.insertBefore(techToggles, kltTabs.nextSibling);
+  }
+  techToggles.innerHTML = '';
+  techToggles.style.display = 'none';
+
   document.getElementById('chart-svg-wrap').innerHTML = '<div class="chart-loading"><div class="spinner"></div><div>加载中…</div></div>';
   document.getElementById('tab-kline').classList.add('active');
   document.getElementById('tab-trend').classList.remove('active');
@@ -28,6 +72,10 @@ async function openChart(code, name, price, pct) {
     }
     renderChartMeta(code, price, pct);
     renderKlineChart();
+    // Load extra data asynchronously
+    if (typeof fetchAndRenderMoneyFlow === 'function') fetchAndRenderMoneyFlow(code);
+    if (typeof fetchAndRenderAuction === 'function') fetchAndRenderAuction(code);
+    if (typeof fetchAndRenderSectorLink === 'function') fetchAndRenderSectorLink(code);
   } catch(e) {
     document.getElementById('chart-svg-wrap').innerHTML = `<div class="chart-loading" style="color:var(--red)">加载失败</div>`;
   }
@@ -42,26 +90,59 @@ function switchChartTab(tab) {
   tab === 'kline' ? renderKlineChart() : renderTrendChart();
 }
 
+// Track which technical overlays are visible
+let showBollinger = false, showMACD = true;
+
 function renderChartMeta(code, price, pct) {
   if (!chartData?.klines?.length) return;
   const k = chartData.klines[chartData.klines.length - 1];
   const amp = k.prev_close > 0 ? ((k.high-k.low)/k.prev_close*100).toFixed(2)+'%'
             : k.close > 0 ? ((k.high-k.low)/k.close*100).toFixed(2)+'%' : '--';
-  document.getElementById('chart-meta').innerHTML = [
+  const metaItems = [
     { l:'今开', v: k.open.toFixed(2) },
     { l:'最高', v: k.high.toFixed(2), c:'up' },
     { l:'最低', v: k.low.toFixed(2),  c:'down' },
     { l:'成交量', v: fmtVol(k.volume) },
     { l:'连板数', v: chartData.consecutive > 0 ? chartData.consecutive+'天' : '无' },
-  ].map(m=>`<div class="meta-item"><div class="ml">${m.l}</div><div class="mv ${m.c||''}">${m.v}</div></div>`).join('');
+  ];
+
+  // Add KDJ/RSI if technicals available
+  const tech = chartData?.technicals;
+  if (tech) {
+    const n = chartData.klines.length - 1;
+    if (tech.kdj) {
+      metaItems.push({ l:'KDJ', v: `K:${tech.kdj.k[n].toFixed(1)} D:${tech.kdj.d[n].toFixed(1)} J:${tech.kdj.j[n].toFixed(1)}` });
+    }
+    if (tech.rsi && tech.rsi.rsi6[n] !== null) {
+      metaItems.push({ l:'RSI', v: `6:${tech.rsi.rsi6[n].toFixed(1)} 12:${(tech.rsi.rsi12[n]||0).toFixed(1)}` });
+    }
+  }
+
+  document.getElementById('chart-meta').innerHTML = metaItems
+    .map(m=>`<div class="meta-item"><div class="ml">${m.l}</div><div class="mv ${m.c||''}">${m.v}</div></div>`).join('');
+
+  // Show tech toggles only for daily kline
+  const techToggles = document.getElementById('tech-toggles');
+  if (techToggles && tech && currentKlt === 101) {
+    techToggles.style.display = 'flex';
+    techToggles.innerHTML = `
+      <button class="qf-btn${showBollinger?' active':''}" onclick="showBollinger=!showBollinger;this.classList.toggle('active');renderKlineChart()" style="font-size:11px;padding:3px 10px">BOLL</button>
+      <button class="qf-btn${showMACD?' active':''}" onclick="showMACD=!showMACD;this.classList.toggle('active');renderKlineChart()" style="font-size:11px;padding:3px 10px">MACD</button>
+    `;
+  } else if (techToggles) {
+    techToggles.style.display = 'none';
+  }
 }
 
 function renderKlineChart() {
   const wrap = document.getElementById('chart-svg-wrap');
   const klines = chartData?.klines;
   if (!klines || klines.length < 2) { wrap.innerHTML='<div class="chart-loading">数据不足</div>'; return; }
-  const W=wrap.clientWidth||800, H=300, PL=50, PR=10, PT=10, PB=40, VH=55;
-  const cW=W-PL-PR, cH=H-PT-PB-VH-8;
+  const tech = chartData?.technicals;
+  const hasMacd = showMACD && tech && tech.macd && currentKlt === 101;
+  const MACD_H = hasMacd ? 80 : 0;
+  const W=wrap.clientWidth||800, H=300+MACD_H, PL=50, PR=10, PT=10, PB=40, VH=55;
+  const cW=W-PL-PR, cH=H-PT-PB-VH-8-MACD_H;
   const n=Math.min(klines.length,60), data=klines.slice(-n);
   const prices=[...data.map(k=>k.high),...data.map(k=>k.low)];
   const pMax=Math.max(...prices), pMin=Math.min(...prices);
@@ -108,7 +189,7 @@ function renderKlineChart() {
     candles+=`<line x1="${x}" y1="${py(k.high)}" x2="${x}" y2="${py(k.low)}" stroke="${color}" stroke-width="1"/>`;
     candles+=`<rect x="${x-bw/2}" y="${top}" width="${bw}" height="${bodyH}" fill="${color}"/>`;
     const vh=Math.max(1,(k.volume/vMax)*(VH-4));
-    const vy=H-PB-vh;
+    const vy=H-PB-MACD_H-vh;
     volumes+=`<rect x="${x-bw/2}" y="${vy}" width="${bw}" height="${vh}" fill="${isUp?'rgba(240,77,77,.5)':'rgba(18,184,110,.5)'}"/>`;
     if(i%Math.ceil(n/6)===0){
       xLabels+=`<text x="${x}" y="${H-PB+14}" text-anchor="middle" fill="#7c8499" font-size="9">${k.date.slice(5)}</text>`;
@@ -121,18 +202,90 @@ function renderKlineChart() {
     (d10 ? `<path d="${d10}" stroke="#f5a623" stroke-width="1.2" fill="none"/>` : '') +
     (d20 ? `<path d="${d20}" stroke="#a06ee1" stroke-width="1.2" fill="none"/>` : '');
 
+  // Bollinger Bands
+  let bollLines = '';
+  if (showBollinger && tech && tech.bollinger && currentKlt === 101) {
+    const boll = tech.bollinger;
+    const offset2 = klines.length - n;
+    const bMid = boll.mid.slice(offset2);
+    const bUp = boll.upper.slice(offset2);
+    const bLow = boll.lower.slice(offset2);
+    function buildBollPath(arr) {
+      let d = '';
+      arr.forEach((v, i) => {
+        if (v === null) return;
+        const x = PL + i * gap + gap / 2, y = py(v);
+        d += d === '' ? `M${x.toFixed(1)} ${y.toFixed(1)}` : ` L${x.toFixed(1)} ${y.toFixed(1)}`;
+      });
+      return d;
+    }
+    const dMid = buildBollPath(bMid);
+    const dUp = buildBollPath(bUp);
+    const dLow = buildBollPath(bLow);
+    if (dMid) bollLines += `<path d="${dMid}" stroke="#e8a838" stroke-width="1" stroke-dasharray="4,3" fill="none"/>`;
+    if (dUp) bollLines += `<path d="${dUp}" stroke="#e85858" stroke-width="1" stroke-dasharray="4,3" fill="none"/>`;
+    if (dLow) bollLines += `<path d="${dLow}" stroke="#38b8e8" stroke-width="1" stroke-dasharray="4,3" fill="none"/>`;
+  }
+
+  // MACD sub-chart
+  let macdSvg = '';
+  if (hasMacd) {
+    const offset2 = klines.length - n;
+    const macdDif = tech.macd.dif.slice(offset2);
+    const macdDea = tech.macd.dea.slice(offset2);
+    const macdHist = tech.macd.histogram.slice(offset2);
+    const macdVals = [...macdDif, ...macdDea, ...macdHist];
+    const mMax = Math.max(...macdVals.map(Math.abs)) || 1;
+    const mBaseY = H - PB - 4;
+    const mTopY = mBaseY - MACD_H + 10;
+    const mCenterY = (mBaseY + mTopY) / 2;
+    const mScale = (MACD_H / 2 - 10) / mMax;
+
+    macdSvg += `<line x1="${PL}" y1="${mTopY}" x2="${W-PR}" y2="${mTopY}" stroke="#2a2d3e" stroke-width="1"/>`;
+    macdSvg += `<line x1="${PL}" y1="${mCenterY}" x2="${W-PR}" y2="${mCenterY}" stroke="#2a2d3e" stroke-width="0.5" stroke-dasharray="3,3"/>`;
+    macdSvg += `<text x="${PL-4}" y="${mTopY+8}" text-anchor="end" fill="#7c8499" font-size="9">MACD</text>`;
+
+    // Histogram bars
+    macdHist.forEach((v, i) => {
+      const x = PL + i * gap + gap / 2;
+      const barH = Math.abs(v) * mScale;
+      const y = v >= 0 ? mCenterY - barH : mCenterY;
+      const color = v >= 0 ? 'rgba(240,77,77,.6)' : 'rgba(18,184,110,.6)';
+      macdSvg += `<rect x="${x - bw/2}" y="${y}" width="${bw}" height="${Math.max(1, barH)}" fill="${color}"/>`;
+    });
+
+    // DIF line
+    let difPath = '';
+    macdDif.forEach((v, i) => {
+      const x = PL + i * gap + gap / 2;
+      const y = mCenterY - v * mScale;
+      difPath += difPath === '' ? `M${x.toFixed(1)} ${y.toFixed(1)}` : ` L${x.toFixed(1)} ${y.toFixed(1)}`;
+    });
+    if (difPath) macdSvg += `<path d="${difPath}" stroke="#4e8ef7" stroke-width="1" fill="none"/>`;
+
+    // DEA line
+    let deaPath = '';
+    macdDea.forEach((v, i) => {
+      const x = PL + i * gap + gap / 2;
+      const y = mCenterY - v * mScale;
+      deaPath += deaPath === '' ? `M${x.toFixed(1)} ${y.toFixed(1)}` : ` L${x.toFixed(1)} ${y.toFixed(1)}`;
+    });
+    if (deaPath) macdSvg += `<path d="${deaPath}" stroke="#f5a623" stroke-width="1" fill="none"/>`;
+  }
+
+  const legendY = hasMacd ? H - PB + 20 : H - 5;
   const legend = `
-    <circle cx="${PL+6}" cy="${H-5}" r="3" fill="#4e8ef7"/>
-    <text x="${PL+12}" y="${H-2}" fill="#4e8ef7" font-size="9">MA5</text>
-    <circle cx="${PL+38}" cy="${H-5}" r="3" fill="#f5a623"/>
-    <text x="${PL+44}" y="${H-2}" fill="#f5a623" font-size="9">MA10</text>
-    <circle cx="${PL+74}" cy="${H-5}" r="3" fill="#a06ee1"/>
-    <text x="${PL+80}" y="${H-2}" fill="#a06ee1" font-size="9">MA20</text>`;
+    <circle cx="${PL+6}" cy="${legendY}" r="3" fill="#4e8ef7"/>
+    <text x="${PL+12}" y="${legendY+3}" fill="#4e8ef7" font-size="9">MA5</text>
+    <circle cx="${PL+38}" cy="${legendY}" r="3" fill="#f5a623"/>
+    <text x="${PL+44}" y="${legendY+3}" fill="#f5a623" font-size="9">MA10</text>
+    <circle cx="${PL+74}" cy="${legendY}" r="3" fill="#a06ee1"/>
+    <text x="${PL+80}" y="${legendY+3}" fill="#a06ee1" font-size="9">MA20</text>`;
 
   wrap.innerHTML=`<svg width="${W}" height="${H}" style="display:block">
     ${lines}
-    <line x1="${PL}" y1="${H-PB-VH-4}" x2="${W-PR}" y2="${H-PB-VH-4}" stroke="#2a2d3e" stroke-width="1"/>
-    ${volumes}${candles}${maLines}${xLabels}${legend}
+    <line x1="${PL}" y1="${H-PB-VH-4-MACD_H}" x2="${W-PR}" y2="${H-PB-VH-4-MACD_H}" stroke="#2a2d3e" stroke-width="1"/>
+    ${volumes}${candles}${maLines}${bollLines}${xLabels}${macdSvg}${legend}
     <line id="kline-hover-line" x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,3" style="display:none"/>
   </svg>
   <div class="chart-tooltip" id="kline-tooltip"></div>`;
