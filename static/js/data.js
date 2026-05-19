@@ -19,13 +19,13 @@ async function fetchData() {
       document.body.classList.add('data-flash');
       setTimeout(()=>document.body.classList.remove('data-flash'), 800);
     } else {
-      updateDataMeta(json.source || '数据接口', json.time);
-      showEmpty(json.error ? `数据暂不可用：${json.error}` : '数据暂不可用，请稍后刷新');
+      updateDataMeta(json.source || '\u6570\u636e\u63a5\u53e3', json.time);
+      showEmpty(json.error ? `\u6570\u636e\u6682\u4e0d\u53ef\u7528\uff1a${json.error}` : '\u6570\u636e\u6682\u4e0d\u53ef\u7528\uff0c\u8bf7\u7a0d\u540e\u5237\u65b0');
     }
   } catch(e) {
     console.error(e);
-    updateDataMeta('数据接口', null);
-    showEmpty('网络异常，数据加载失败，请稍后刷新');
+    updateDataMeta('\u6570\u636e\u63a5\u53e3', null);
+    showEmpty('\u7f51\u7edc\u5f02\u5e38\uff0c\u6570\u636e\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u5237\u65b0');
   }
   finally { btn.classList.remove('spinning'); }
 }
@@ -89,7 +89,7 @@ async function fetchIndices() {
       el.querySelector('.idx-price').textContent = parseFloat(idx.price).toFixed(2);
       el.querySelector('.idx-price').className = 'idx-price ' + cls;
       el.querySelector('.idx-change').innerHTML = `<span class="${cls}">${sign}${pct.toFixed(2)}%&nbsp;&nbsp;${sign}${parseFloat(idx.change).toFixed(2)}</span>`;
-      el.querySelector('.idx-extra').textContent = `振幅 ${amp}%  量 ${fmtMoney(idx.turnover)}`;
+      el.querySelector('.idx-extra').textContent = `\u632f\u5e45 ${amp}%  \u989d ${fmtMoney(idx.turnover)}`;
       el.className = 'index-card ' + (isUp ? 'up-card' : isDown ? 'down-card' : '');
     });
   } catch(e) { console.error(e); }

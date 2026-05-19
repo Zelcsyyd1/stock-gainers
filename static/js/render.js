@@ -7,6 +7,7 @@ function currentListData() {
 function renderNormalTable() {
   document.getElementById('thead-normal').style.display = '';
   document.getElementById('thead-screen').style.display = 'none';
+  normalizeTableHeaders();
   const baseData = currentListData();
   const sorted = sortedData(baseData);
   hideAll();
@@ -48,6 +49,7 @@ function renderNormalTable() {
       <td style="color:var(--muted)">${fmtMoney(s.turnover)}</td>
       <td ${inflowC}>${fmtMoney(s.net_inflow)}</td>
       <td style="color:var(--muted)">${fmt(s.pe)}</td>
+      <td style="text-align:left;color:var(--muted);font-size:12px">${escapeHtml(stockReason(s))}</td>
     </tr>`;
   }).join('');
 
@@ -64,6 +66,7 @@ function renderNormalTable() {
 function renderScreenTable(candidates) {
   document.getElementById('thead-normal').style.display = 'none';
   document.getElementById('thead-screen').style.display = '';
+  normalizeTableHeaders();
   hideAll();
   if (!candidates||!candidates.length) { showEmpty('无符合条件的股票'); return; }
   showTable();
@@ -109,6 +112,33 @@ function classifyHeatRow(s) {
   if (isLimitUp(pct, s.code)) return 'row-limit';
   if (pct >= 7 || vr >= 2.5 || tr >= 8) return 'row-heat';
   return '';
+}
+
+function normalizeTableHeaders() {
+  const normal = document.querySelectorAll('#thead-normal th');
+  [
+    '', '', '#', '股票', '涨跌幅', '现价', '涨跌额', '量比', '换手率',
+    '市值(亿)', '今开', '最高', '最低', '振幅', '成交额', '主力净流入',
+    '市盈率', '入选原因',
+  ].forEach((text, i) => {
+    if (!normal[i]) return;
+    if (text) normal[i].textContent = text;
+  });
+  if (normal.length === 17) {
+    const th = document.createElement('th');
+    th.textContent = '入选原因';
+    th.style.textAlign = 'left';
+    normal[16].parentElement.appendChild(th);
+  }
+
+  const screen = document.querySelectorAll('#thead-screen th');
+  [
+    '', '#', '股票', '涨跌幅', '现价', '量比', '换手率', '市值(亿)',
+    '30日涨停', '分时条件', '结果',
+  ].forEach((text, i) => {
+    if (!screen[i]) return;
+    if (text) screen[i].textContent = text;
+  });
 }
 
 function pressureEventClass(type, pct) {
