@@ -546,14 +546,15 @@ module.exports = function (app) {
       const passed = results.filter(s => s.pass);
       const time = nowStr();
       if (supabase) {
-        await supabase.from('screen_history').insert({
+        const { error: historyError } = await supabase.from('screen_history').insert({
           id: Date.now(), time,
           params: { ...params, max_cap: params.max_cap / 1e8 },
           total_scanned: allStocks.length,
           total_candidates: candidates.length,
           total_passed: passed.length,
           passed: passed.map(s => ({ code: s.code, name: s.name, change_pct: s.change_pct, price: s.price })),
-        }).catch(e => console.error('Failed to save history:', e));
+        });
+        if (historyError) console.error('Failed to save history:', historyError);
       }
       const payload = {
         success: true, passed, all_candidates: results,
