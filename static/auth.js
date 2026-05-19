@@ -1,4 +1,33 @@
 (function () {
+  const I18N = {
+    login: '\u767b\u5f55',
+    account: '\u8d26\u53f7\u72b6\u6001',
+    accountTitle: '\u67e5\u770b\u8d26\u53f7',
+    loginTitle: '\u767b\u5f55\u6216\u6ce8\u518c\u8d26\u53f7',
+    emailLogin: '\u90ae\u7bb1\u767b\u5f55',
+    marketGuest: '\u884c\u60c5\u53ef\u514d\u767b\u5f55\u67e5\u770b\u3002\u767b\u5f55\u540e\u53ef\u4fdd\u5b58\u81ea\u9009\u80a1\u3001\u7b5b\u9009\u6761\u4ef6\u3001\u5386\u53f2\u8bb0\u5f55\u548c\u63d0\u9192\u8bbe\u7f6e\u3002',
+    enterEmail: '\u8bf7\u8f93\u5165\u90ae\u7bb1',
+    captchaFirst: '\u8bf7\u5148\u5b8c\u6210\u4eba\u673a\u9a8c\u8bc1',
+    codeSending: '\u9a8c\u8bc1\u7801\u53d1\u9001\u4e2d...',
+    codeSendFail: '\u9a8c\u8bc1\u7801\u53d1\u9001\u5931\u8d25',
+    codeSent: '\u5982\u679c\u90ae\u7bb1\u53ef\u7528\uff0c\u9a8c\u8bc1\u7801\u5df2\u53d1\u9001\uff0c\u8bf7\u67e5\u6536',
+    sendCode: '\u53d1\u9001\u9a8c\u8bc1\u7801',
+    enterEmailPassword: '\u8bf7\u8f93\u5165\u90ae\u7bb1\u548c\u5bc6\u7801',
+    passwordMin: '\u5bc6\u7801\u81f3\u5c118\u4f4d',
+    enterSixCode: '\u8bf7\u8f93\u51656\u4f4d\u90ae\u7bb1\u9a8c\u8bc1\u7801',
+    registering: '\u6ce8\u518c\u4e2d...',
+    loggingIn: '\u767b\u5f55\u4e2d...',
+    opFail: '\u64cd\u4f5c\u5931\u8d25',
+    resetTitle: '\u91cd\u7f6e\u5bc6\u7801',
+    resetHint: '\u8f93\u5165\u6ce8\u518c\u90ae\u7bb1\u548c\u65b0\u5bc6\u7801\uff0c\u70b9\u51fb\u53d1\u9001\u9a8c\u8bc1\u7801',
+    backLogin: '\u90ae\u7bb1\u767b\u5f55',
+    resetSent: '\u9a8c\u8bc1\u7801\u5df2\u53d1\u9001\uff0c\u8bf7\u67e5\u6536\u90ae\u4ef6',
+    newPasswordMin: '\u65b0\u5bc6\u7801\u81f3\u5c118\u4f4d',
+    enterResetCode: '\u8bf7\u8f93\u51656\u4f4d\u9a8c\u8bc1\u7801',
+    resetting: '\u91cd\u7f6e\u4e2d...',
+    resetFail: '\u91cd\u7f6e\u5931\u8d25',
+  };
+
   function text(id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = value;
@@ -42,8 +71,8 @@
     function updateAuthUI() {
       const btn = document.getElementById('auth-btn');
       if (btn) {
-        btn.textContent = currentUser ? currentUser.username : '登录';
-        btn.title = currentUser ? (options.loggedInTitle || '查看账号') : (options.loggedOutTitle || '登录或注册账号');
+        btn.textContent = currentUser ? currentUser.username : I18N.login;
+        btn.title = currentUser ? (options.loggedInTitle || I18N.accountTitle) : (options.loggedOutTitle || I18N.loginTitle);
       }
       if (typeof options.onUpdateAuthUI === 'function') options.onUpdateAuthUI({ user: currentUser });
     }
@@ -51,7 +80,7 @@
     function openAuth() {
       display('auth-overlay', 'flex');
       if (accountPanel) {
-        text('auth-title', currentUser ? '账号状态' : '邮箱登录');
+        text('auth-title', currentUser ? I18N.account : I18N.emailLogin);
         display('auth-form', currentUser ? 'none' : 'grid');
         display('account-panel', currentUser ? 'grid' : 'none');
         if (currentUser) {
@@ -59,7 +88,7 @@
           return;
         }
       }
-      text('auth-msg', '行情可免登录查看。登录后可保存自选股、筛选条件、历史记录和提醒设置。');
+      text('auth-msg', I18N.marketGuest);
       renderTurnstile();
       setTimeout(() => {
         const input = document.getElementById('auth-username');
@@ -106,10 +135,10 @@
       const msg = document.getElementById('auth-msg');
       const btn = document.getElementById('auth-send-code');
       if (!msg || !btn) return;
-      if (!email) { msg.textContent = '请输入邮箱'; return; }
-      if (turnstileSiteKey && !getTurnstileToken()) { msg.textContent = '请先完成人机验证'; return; }
+      if (!email) { msg.textContent = I18N.enterEmail; return; }
+      if (turnstileSiteKey && !getTurnstileToken()) { msg.textContent = I18N.captchaFirst; return; }
       btn.disabled = true;
-      msg.textContent = '验证码发送中...';
+      msg.textContent = I18N.codeSending;
       try {
         const res = await fetch('/api/auth/send-code', {
           method: 'POST',
@@ -117,8 +146,8 @@
           body: JSON.stringify({ email, turnstileToken: getTurnstileToken() }),
         });
         const json = await res.json();
-        if (!json.success) throw new Error(json.error || '验证码发送失败');
-        msg.textContent = json.message || '如果邮箱可用，验证码已发送，请查收';
+        if (!json.success) throw new Error(json.error || I18N.codeSendFail);
+        msg.textContent = json.message || I18N.codeSent;
         let sec = 60;
         btn.textContent = `${sec}s`;
         const timer = setInterval(() => {
@@ -126,7 +155,7 @@
           if (sec <= 0) {
             clearInterval(timer);
             btn.disabled = false;
-            btn.textContent = '发送验证码';
+            btn.textContent = I18N.sendCode;
             resetTurnstile();
           } else {
             btn.textContent = `${sec}s`;
@@ -148,10 +177,10 @@
       const loginBtn = document.getElementById('auth-login');
       const registerBtn = document.getElementById('auth-register');
       if (!msg || !loginBtn || !registerBtn) return;
-      if (!username || !password) { msg.textContent = '请输入邮箱和密码'; return; }
-      if (mode === 'register' && password.length < 8) { msg.textContent = '密码至少8位'; return; }
-      if (mode === 'register' && !/^\d{6}$/.test(code)) { msg.textContent = '请输入6位邮箱验证码'; return; }
-      msg.textContent = mode === 'register' ? '注册中...' : '登录中...';
+      if (!username || !password) { msg.textContent = I18N.enterEmailPassword; return; }
+      if (mode === 'register' && password.length < 8) { msg.textContent = I18N.passwordMin; return; }
+      if (mode === 'register' && !/^\d{6}$/.test(code)) { msg.textContent = I18N.enterSixCode; return; }
+      msg.textContent = mode === 'register' ? I18N.registering : I18N.loggingIn;
       loginBtn.disabled = true;
       registerBtn.disabled = true;
       const body = { username, password };
@@ -163,7 +192,7 @@
           body: JSON.stringify(body),
         });
         const json = await res.json();
-        if (!json.success) throw new Error(json.error || '操作失败');
+        if (!json.success) throw new Error(json.error || I18N.opFail);
         setCurrentUser(json.user);
         if (typeof options.onAuthSuccess === 'function') {
           options.onAuthSuccess({ mode, user: currentUser, profile: json.profile || null, json });
@@ -178,16 +207,13 @@
       }
     }
 
-    // ── Forgot / Reset Password ───────────────────────────────────────────
     let forgotMode = false;
 
     function showForgotMode() {
       forgotMode = true;
-      const title = document.getElementById('auth-title');
-      if (title) title.textContent = '重置密码';
+      text('auth-title', I18N.resetTitle);
       display('auth-code-row', codeRowDisplay);
-      const msg = document.getElementById('auth-msg');
-      if (msg) msg.textContent = '输入注册邮箱和新密码，点击发送验证码';
+      text('auth-msg', I18N.resetHint);
       const loginBtn = document.getElementById('auth-login');
       const registerBtn = document.getElementById('auth-register');
       const forgotLink = document.getElementById('auth-forgot');
@@ -202,11 +228,9 @@
 
     function showLoginMode() {
       forgotMode = false;
-      const title = document.getElementById('auth-title');
-      if (title) title.textContent = '邮箱登录';
+      text('auth-title', I18N.emailLogin);
       display('auth-code-row', 'none');
-      const msg = document.getElementById('auth-msg');
-      if (msg) msg.textContent = '行情可免登录查看。登录后可保存自选股、筛选条件、历史记录和提醒设置。';
+      text('auth-msg', I18N.marketGuest);
       const loginBtn = document.getElementById('auth-login');
       const registerBtn = document.getElementById('auth-register');
       const forgotLink = document.getElementById('auth-forgot');
@@ -224,9 +248,9 @@
       const msg = document.getElementById('auth-msg');
       const btn = document.getElementById('auth-send-code');
       if (!msg || !btn) return;
-      if (!email) { msg.textContent = '请输入邮箱'; return; }
+      if (!email) { msg.textContent = I18N.enterEmail; return; }
       btn.disabled = true;
-      msg.textContent = '验证码发送中...';
+      msg.textContent = I18N.codeSending;
       try {
         const res = await fetch('/api/auth/forgot', {
           method: 'POST',
@@ -234,8 +258,8 @@
           body: JSON.stringify({ email }),
         });
         const json = await res.json();
-        if (!json.success) throw new Error(json.error || '发送失败');
-        msg.textContent = json.message || '验证码已发送，请查收邮件';
+        if (!json.success) throw new Error(json.error || I18N.codeSendFail);
+        msg.textContent = json.message || I18N.resetSent;
         let sec = 60;
         btn.textContent = `${sec}s`;
         const timer = setInterval(() => {
@@ -243,7 +267,7 @@
           if (sec <= 0) {
             clearInterval(timer);
             btn.disabled = false;
-            btn.textContent = '发送验证码';
+            btn.textContent = I18N.sendCode;
           } else {
             btn.textContent = `${sec}s`;
           }
@@ -262,11 +286,11 @@
       const msg = document.getElementById('auth-msg');
       const resetBtn = document.getElementById('auth-reset-btn');
       if (!msg) return;
-      if (!email) { msg.textContent = '请输入邮箱'; return; }
-      if (!password || password.length < 8) { msg.textContent = '新密码至少8位'; return; }
-      if (!/^\d{6}$/.test(code)) { msg.textContent = '请输入6位验证码'; return; }
+      if (!email) { msg.textContent = I18N.enterEmail; return; }
+      if (!password || password.length < 8) { msg.textContent = I18N.newPasswordMin; return; }
+      if (!/^\d{6}$/.test(code)) { msg.textContent = I18N.enterResetCode; return; }
       if (resetBtn) resetBtn.disabled = true;
-      msg.textContent = '重置中...';
+      msg.textContent = I18N.resetting;
       try {
         const res = await fetch('/api/auth/reset-password', {
           method: 'POST',
@@ -274,7 +298,7 @@
           body: JSON.stringify({ email, password, code }),
         });
         const json = await res.json();
-        if (!json.success) throw new Error(json.error || '重置失败');
+        if (!json.success) throw new Error(json.error || I18N.resetFail);
         setCurrentUser(json.user);
         if (typeof options.onAuthSuccess === 'function') {
           options.onAuthSuccess({ mode: 'reset', user: currentUser, profile: json.profile || null, json });

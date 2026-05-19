@@ -223,6 +223,28 @@ async function requireUser(req, res) {
   return user;
 }
 
+async function sendVerificationEmail(email, code) {
+  if (!mailer) throw new Error('\u90ae\u4ef6\u670d\u52a1\u672a\u914d\u7f6e');
+  await mailer.sendMail({
+    from: SMTP_FROM,
+    to: email,
+    subject: '\u6da8\u52bf\u901a\u6ce8\u518c\u9a8c\u8bc1\u7801',
+    text: `\u4f60\u7684\u6ce8\u518c\u9a8c\u8bc1\u7801\u662f ${code}\uff0c10\u5206\u949f\u5185\u6709\u6548\u3002\u82e5\u4e0d\u662f\u4f60\u672c\u4eba\u64cd\u4f5c\uff0c\u8bf7\u5ffd\u7565\u8fd9\u5c01\u90ae\u4ef6\u3002`,
+    html: `<p>\u4f60\u7684\u6ce8\u518c\u9a8c\u8bc1\u7801\u662f <strong style="font-size:20px">${code}</strong></p><p>10\u5206\u949f\u5185\u6709\u6548\u3002\u82e5\u4e0d\u662f\u4f60\u672c\u4eba\u64cd\u4f5c\uff0c\u8bf7\u5ffd\u7565\u8fd9\u5c01\u90ae\u4ef6\u3002</p>`,
+  });
+}
+
+async function sendResetEmail(email, code) {
+  if (!mailer) throw new Error('\u90ae\u4ef6\u670d\u52a1\u672a\u914d\u7f6e');
+  await mailer.sendMail({
+    from: SMTP_FROM,
+    to: email,
+    subject: '\u6da8\u52bf\u901a\u5bc6\u7801\u91cd\u7f6e\u9a8c\u8bc1\u7801',
+    text: `\u4f60\u7684\u5bc6\u7801\u91cd\u7f6e\u9a8c\u8bc1\u7801\u662f ${code}\uff0c10\u5206\u949f\u5185\u6709\u6548\u3002\u82e5\u4e0d\u662f\u4f60\u672c\u4eba\u64cd\u4f5c\uff0c\u8bf7\u5ffd\u7565\u8fd9\u5c01\u90ae\u4ef6\u3002`,
+    html: `<p>\u4f60\u7684\u5bc6\u7801\u91cd\u7f6e\u9a8c\u8bc1\u7801\u662f <strong style="font-size:20px">${code}</strong></p><p>10\u5206\u949f\u5185\u6709\u6548\u3002\u82e5\u4e0d\u662f\u4f60\u672c\u4eba\u64cd\u4f5c\uff0c\u8bf7\u5ffd\u7565\u8fd9\u5c01\u90ae\u4ef6\u3002</p>`,
+  });
+}
+
 module.exports = {
   supabase,
   normalizeEmail, isValidEmail, publicUser,

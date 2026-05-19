@@ -23,3 +23,10 @@ create table if not exists public.email_codes (
 
 create index if not exists email_codes_expires_idx
   on public.email_codes (expires_at);
+
+create table if not exists public.users (
+  username text primary key,
+  password_hash text not null,
+  created_at text not null,
+  profile jsonb not null default '{}'::jsonb
+);

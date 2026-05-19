@@ -2632,6 +2632,39 @@
   </div>
 </div>
 
+<script>
+  (function normalizeAuthModal(){
+    var overlay = document.getElementById('auth-overlay');
+    if (!overlay) return;
+    overlay.innerHTML = '<div id="auth-modal" style="width:min(420px,95vw);background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">' +
+      '<div class="modal-header">' +
+        '<h3 id="auth-title">&#37038;&#31665;&#30331;&#24405;</h3>' +
+        '<button class="modal-close" id="auth-close">x</button>' +
+      '</div>' +
+      '<div class="modal-body">' +
+        '<div class="auth-form">' +
+          '<input id="auth-username" type="email" placeholder="&#37038;&#31665;" autocomplete="email"/>' +
+          '<input id="auth-password" type="password" placeholder="&#23494;&#30721;&#65288;&#33267;&#23569;8&#20301;&#65289;" autocomplete="current-password"/>' +
+          '<div id="auth-turnstile"></div>' +
+          '<div id="auth-code-row" style="display:none;gap:8px;align-items:center">' +
+            '<input id="auth-code" type="text" placeholder="&#37038;&#31665;&#39564;&#35777;&#30721;" maxlength="6" style="flex:1" autocomplete="one-time-code"/>' +
+            '<button id="auth-send-code" type="button" style="white-space:nowrap;min-width:96px">&#21457;&#36865;&#39564;&#35777;&#30721;</button>' +
+          '</div>' +
+          '<div class="auth-actions">' +
+            '<button class="primary" id="auth-login">&#30331;&#24405;</button>' +
+            '<button id="auth-register">&#27880;&#20876;</button>' +
+            '<button class="primary" id="auth-reset-btn" style="display:none">&#30830;&#35748;&#37325;&#32622;</button>' +
+          '</div>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;">' +
+            '<a href="#" id="auth-forgot" style="color:var(--accent);text-decoration:none;">&#24536;&#35760;&#23494;&#30721;&#65311;</a>' +
+            '<a href="#" id="auth-back-login" style="color:var(--accent);text-decoration:none;display:none;">&#36820;&#22238;&#30331;&#24405;</a>' +
+          '</div>' +
+          '<div class="auth-msg" id="auth-msg">&#34892;&#24773;&#21487;&#20813;&#30331;&#24405;&#26597;&#30475;&#12290;&#30331;&#24405;&#21518;&#21487;&#20445;&#23384;&#33258;&#36873;&#32929;&#12289;&#31579;&#36873;&#26465;&#20214;&#12289;&#21382;&#21490;&#35760;&#24405;&#21644;&#25552;&#37266;&#35774;&#32622;&#12290;</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  })();
+</script>
 <script src="/static/bundle.js"></script>
 </body>
 </html>
